@@ -20,9 +20,17 @@ import {
   User,
   ArrowUp,
   ArrowDown,
-  Share2
+  Share2,
+  BookOpen,
+  FileText,
+  File,
+  Link,
+  Video,
+  Paperclip,
+  FileCode,
+  Globe
 } from 'lucide-react';
-import { Project, ProjectTask, SubTask, Comment } from '@/src/types';
+import { Project, ProjectTask, SubTask, Comment, ProjectResource, ProjectNote, ProjectFile } from '@/src/types';
 import { cn, generateGoogleCalendarUrlForTask } from '@/src/lib/utils';
 import { format } from 'date-fns';
 import {
@@ -52,6 +60,7 @@ interface ProjectDashboardProps {
   setIsAddingProject: (val: boolean) => void;
   onAddProject: (name: string, description: string, color?: string) => void;
   onDeleteProject: (id: string) => void;
+  onUpdateProject: (project: Project) => void;
   onAddTask: (task: Omit<ProjectTask, 'id' | 'subTasks' | 'comments' | 'createdAt'>) => void;
   onUpdateTask: (task: ProjectTask) => void;
   onDeleteTask: (id: string) => void;
@@ -64,11 +73,13 @@ export default function ProjectDashboard({
   setIsAddingProject,
   onAddProject, 
   onDeleteProject,
+  onUpdateProject,
   onAddTask,
   onUpdateTask,
   onDeleteTask
 }: ProjectDashboardProps) {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(projects[0]?.id || null);
+  const [activeProjectTab, setActiveProjectTab] = useState<'dashboard' | 'resources' | 'notes' | 'files'>('dashboard');
   
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDesc, setNewProjectDesc] = useState('');
@@ -341,6 +352,33 @@ export default function ProjectDashboard({
                       >
                         {activeProject.description}
                       </motion.p>
+                      
+                      <div className="flex items-center gap-2 mt-8 border-b border-slate-100 w-fit">
+                        {[
+                          { id: 'dashboard', label: 'Tasks', icon: Layout },
+                          { id: 'resources', label: 'Resources', icon: BookOpen },
+                          { id: 'notes', label: 'Notes', icon: FileText },
+                          { id: 'files', label: 'Files', icon: Paperclip },
+                        ].map(tab => (
+                          <button
+                            key={tab.id}
+                            onClick={() => setActiveProjectTab(tab.id as any)}
+                            className={cn(
+                              "flex items-center gap-2 px-6 py-3 text-xs font-black uppercase tracking-widest transition-all relative overflow-hidden",
+                              activeProjectTab === tab.id ? "text-indigo-600" : "text-slate-400 hover:text-slate-600"
+                            )}
+                          >
+                            <tab.icon size={14} />
+                            {tab.label}
+                            {activeProjectTab === tab.id && (
+                              <motion.div 
+                                layoutId="activeTabUnderline"
+                                className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600" 
+                              />
+                            )}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                     
                     <motion.div 
@@ -370,46 +408,73 @@ export default function ProjectDashboard({
                       </div>
                     </motion.div>
                   </div>
+                </div>
 
-                {/* Status Sections */}
-                <DndContext 
-                  sensors={sensors}
-                  collisionDetection={closestCorners}
-                  onDragEnd={handleDragEnd}
-                >
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
-                    {(['todo', 'in-progress', 'completed'] as const).map((status, index) => (
+                <div className="flex-1 overflow-y-auto px-8 no-scrollbar">
+                  <AnimatePresence mode="wait">
+                    {activeProjectTab === 'dashboard' ? (
                       <motion.div
-                        key={status}
-                        initial={{ opacity: 0, y: 20 }}
+                        key="tasks"
+                        initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.3 + index * 0.1 }}
+                        exit={{ opacity: 0, y: -10 }}
                       >
-                        <TaskColumn 
-                          status={status} 
-                          projectTasks={projectTasks} 
-                          onUpdateTask={onUpdateTask} 
-                          onDeleteTask={onDeleteTask} 
-                          setViewingTask={setViewingTask}
-                          setIsAddingTask={setIsAddingTask}
-                          projectColor={activeProject.color}
-                        />
+                        <DndContext 
+                          sensors={sensors}
+                          collisionDetection={closestCorners}
+                          onDragEnd={handleDragEnd}
+                        >
+                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                            {(['todo', 'in-progress', 'completed'] as const).map((status, index) => (
+                              <motion.div
+                                key={status}
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.1 + index * 0.1 }}
+                              >
+                                <TaskColumn 
+                                  status={status} 
+                                  projectTasks={projectTasks} 
+                                  onUpdateTask={onUpdateTask} 
+                                  onDeleteTask={onDeleteTask} 
+                                  setViewingTask={setViewingTask}
+                                  setIsAddingTask={setIsAddingTask}
+                                  projectColor={activeProject.color}
+                                />
+                              </motion.div>
+                            ))}
+                          </div>
+                          <DragOverlay dropAnimation={{
+                            sideEffects: defaultDropAnimationSideEffects({
+                              styles: {
+                                active: {
+                                  opacity: '0.4',
+                                },
+                              },
+                            }),
+                          }}>
+                            {/* Drag overlay handled by SortableContext */}
+                          </DragOverlay>
+                        </DndContext>
                       </motion.div>
-                    ))}
-                  </div>
-                  <DragOverlay dropAnimation={{
-                    sideEffects: defaultDropAnimationSideEffects({
-                      styles: {
-                        active: {
-                          opacity: '0.4',
-                        },
-                      },
-                    }),
-                  }}>
-                    {/* Add a placeholder or a preview if needed */}
-                  </DragOverlay>
-                </DndContext>
-              </div>
+                    ) : activeProjectTab === 'resources' ? (
+                      <ResourcesView 
+                        project={activeProject} 
+                        onUpdateProject={onUpdateProject} 
+                      />
+                    ) : activeProjectTab === 'notes' ? (
+                      <NotesView 
+                        project={activeProject} 
+                        onUpdateProject={onUpdateProject} 
+                      />
+                    ) : (
+                      <FilesView 
+                        project={activeProject} 
+                        onUpdateProject={onUpdateProject} 
+                      />
+                    )}
+                  </AnimatePresence>
+                </div>
             </motion.div>
           ) : (
             <motion.div 
@@ -1311,5 +1376,419 @@ function TaskCard({ task, onUpdate, onDelete, onClick, projectColor }: {
         )}
       </AnimatePresence>
     </motion.div>
+  );
+}
+
+// Sub-page components for Resources, Notes, and Files
+function ResourcesView({ project, onUpdateProject }: { project: Project, onUpdateProject: (p: Project) => void }) {
+  const [isAdding, setIsAdding] = useState(false);
+  const [title, setTitle] = useState('');
+  const [url, setUrl] = useState('');
+  const [type, setType] = useState<ProjectResource['type']>('link');
+
+  const resources = project.resources || [];
+
+  const handleAdd = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (title.trim() && url.trim()) {
+      const newResource: ProjectResource = {
+        id: Math.random().toString(36).substr(2, 9),
+        title,
+        url,
+        type,
+        createdAt: new Date()
+      };
+      onUpdateProject({ ...project, resources: [...resources, newResource] });
+      setTitle('');
+      setUrl('');
+      setIsAdding(false);
+    }
+  };
+
+  const deleteResource = (id: string) => {
+    onUpdateProject({ ...project, resources: resources.filter(r => r.id !== id) });
+  };
+
+  return (
+    <div className="py-8 space-y-8">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900">Project Resources</h2>
+          <p className="text-xs text-slate-400 mt-1 uppercase tracking-widest font-black">Links and documentation for the team</p>
+        </div>
+        <button 
+          onClick={() => setIsAdding(true)}
+          className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-black flex items-center gap-2 hover:bg-black transition-all shadow-lg active:scale-95"
+        >
+          <Plus size={16} />
+          Add Resource
+        </button>
+      </div>
+
+      <AnimatePresence>
+        {isAdding && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <form onSubmit={handleAdd} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+               <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Resource Title</label>
+                    <input 
+                      required
+                      value={title}
+                      onChange={e => setTitle(e.target.value)}
+                      placeholder="e.g., Design Guidelines"
+                      className="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">URL / Path</label>
+                    <input 
+                      required
+                      value={url}
+                      onChange={e => setUrl(e.target.value)}
+                      placeholder="https://..."
+                      className="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all"
+                    />
+                  </div>
+               </div>
+               <div className="flex flex-wrap gap-4 items-end">
+                  <div className="flex-1">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Type</label>
+                    <div className="flex gap-2">
+                       {(['link', 'document', 'video', 'other'] as const).map(t => (
+                         <button
+                           key={t}
+                           type="button"
+                           onClick={() => setType(t)}
+                           className={cn(
+                             "px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all border",
+                             type === t ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-400 border-slate-200 hover:border-slate-300"
+                           )}
+                         >
+                           {t}
+                         </button>
+                       ))}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button 
+                      type="button"
+                      onClick={() => setIsAdding(false)}
+                      className="px-4 py-3 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      type="submit"
+                      className="px-6 py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+                    >
+                      Save Resource
+                    </button>
+                  </div>
+               </div>
+            </form>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {resources.length === 0 ? (
+          <div className="col-span-full py-20 bg-white rounded-[40px] border border-dashed border-slate-200 flex flex-col items-center justify-center text-center">
+             <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 text-slate-300">
+               <BookOpen size={32} />
+             </div>
+             <h3 className="text-sm font-bold text-slate-900">No resources found</h3>
+             <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">Keep all important links and documentation in one place for your team.</p>
+          </div>
+        ) : (
+          resources.map(resource => (
+            <motion.div
+              layout
+              key={resource.id}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all group"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="p-3 bg-slate-50 rounded-2xl text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-all">
+                  {resource.type === 'link' ? <Globe size={20} /> : resource.type === 'document' ? <FileText size={20} /> : resource.type === 'video' ? <Video size={20} /> : <BookOpen size={20} />}
+                </div>
+                <button 
+                  onClick={() => deleteResource(resource.id)}
+                  className="p-2 hover:bg-red-50 rounded-xl text-slate-300 hover:text-red-500 transition-all"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+              <h4 className="font-bold text-slate-900 truncate" title={resource.title}>{resource.title}</h4>
+              <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mt-1 mb-4">{resource.type}</p>
+              <a 
+                href={resource.url.startsWith('http') ? resource.url : `https://${resource.url}`} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors"
+              >
+                Open Resource <Link size={12} />
+              </a>
+            </motion.div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function NotesView({ project, onUpdateProject }: { project: Project, onUpdateProject: (p: Project) => void }) {
+  const [activeNoteId, setActiveNoteId] = useState<string | null>(project.notes?.[0]?.id || null);
+  const [isAdding, setIsAdding] = useState(false);
+  const [noteTitle, setNoteTitle] = useState('');
+
+  const notes = project.notes || [];
+  const activeNote = notes.find(n => n.id === activeNoteId);
+
+  const addNote = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (noteTitle.trim()) {
+      const newNote: ProjectNote = {
+        id: Math.random().toString(36).substr(2, 9),
+        title: noteTitle,
+        content: '',
+        updatedAt: new Date()
+      };
+      onUpdateProject({ ...project, notes: [...notes, newNote] });
+      setNoteTitle('');
+      setIsAdding(false);
+      setActiveNoteId(newNote.id);
+    }
+  };
+
+  const updateNoteContent = (content: string) => {
+    if (!activeNote) return;
+    const updatedNotes = notes.map(n => 
+      n.id === activeNoteId ? { ...n, content, updatedAt: new Date() } : n
+    );
+    onUpdateProject({ ...project, notes: updatedNotes });
+  };
+
+  const deleteNote = (id: string) => {
+    const updatedNotes = notes.filter(n => n.id !== id);
+    onUpdateProject({ ...project, notes: updatedNotes });
+    if (activeNoteId === id) setActiveNoteId(updatedNotes[0]?.id || null);
+  };
+
+  return (
+    <div className="flex h-full py-8 gap-8 overflow-hidden">
+      <div className="w-80 flex flex-col gap-6">
+        <div className="flex items-center justify-between">
+           <h2 className="text-xl font-bold text-slate-900">Project Notes</h2>
+           <button onClick={() => setIsAdding(true)} className="p-2 bg-slate-900 text-white rounded-xl hover:bg-black transition-all shadow-lg active:scale-95">
+             <Plus size={16} />
+           </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto no-scrollbar space-y-3">
+          <AnimatePresence>
+            {isAdding && (
+              <motion.form 
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                onSubmit={addNote} 
+                className="bg-white p-4 rounded-2xl border-2 border-indigo-500 shadow-md"
+              >
+                 <input 
+                   autoFocus
+                   value={noteTitle}
+                   onChange={e => setNoteTitle(e.target.value)}
+                   placeholder="Note title..."
+                   className="w-full border-0 focus:ring-0 text-sm font-bold bg-transparent mb-2"
+                 />
+                 <div className="flex justify-end gap-2">
+                    <button type="button" onClick={() => setIsAdding(false)} className="text-[10px] font-black uppercase text-slate-400 hover:text-slate-600 px-2 py-1">Cancel</button>
+                    <button type="submit" className="text-[10px] font-black uppercase text-indigo-600 hover:text-indigo-700 px-2 py-1">Save</button>
+                 </div>
+              </motion.form>
+            )}
+          </AnimatePresence>
+
+          {notes.length === 0 && !isAdding ? (
+            <div className="py-20 text-center opacity-50">
+              <FileText size={48} className="mx-auto mb-4 text-slate-300" />
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-400">No notes found</p>
+            </div>
+          ) : (
+            notes.map(note => (
+              <div 
+                key={note.id}
+                onClick={() => setActiveNoteId(note.id)}
+                className={cn(
+                  "p-4 rounded-2xl cursor-pointer transition-all border group",
+                  activeNoteId === note.id 
+                    ? "bg-white border-indigo-100 shadow-md ring-1 ring-indigo-50" 
+                    : "bg-slate-100/50 border-transparent hover:bg-white hover:border-slate-200"
+                )}
+              >
+                 <div className="flex items-start justify-between">
+                    <h4 className={cn("text-sm font-bold truncate pr-6", activeNoteId === note.id ? "text-indigo-600" : "text-slate-900")}>
+                      {note.title}
+                    </h4>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); deleteNote(note.id); }}
+                      className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-red-500 transition-all"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                 </div>
+                 <p className="text-[10px] font-bold text-slate-400 mt-2">{format(note.updatedAt, 'MMM d, h:mm a')}</p>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="flex-1 bg-white rounded-[40px] border border-slate-100 shadow-sm flex flex-col overflow-hidden">
+        {activeNote ? (
+          <div className="flex-1 flex flex-col p-10">
+             <div className="mb-10 flex items-center justify-between">
+                <div>
+                   <h3 className="text-2xl font-black text-slate-900 tracking-tight">{activeNote.title}</h3>
+                   <div className="flex items-center gap-2 mt-2">
+                      <Clock size={12} className="text-slate-400" />
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Last updated {format(activeNote.updatedAt, 'PPPP p')}</span>
+                   </div>
+                </div>
+             </div>
+             <textarea 
+               value={activeNote.content}
+               onChange={e => updateNoteContent(e.target.value)}
+               placeholder="Start writing your thoughts..."
+               className="flex-1 w-full bg-transparent border-0 focus:ring-0 text-slate-700 font-medium leading-relaxed resize-none text-lg p-0"
+             />
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center p-20 text-center opacity-50">
+             <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6">
+               <FileText size={32} className="text-slate-200" />
+             </div>
+             <h3 className="text-xl font-bold text-slate-900">Choose a Note</h3>
+             <p className="text-slate-500 max-w-xs mt-2">Select a note from the left sidebar or create a new one to begin editing.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FilesView({ project, onUpdateProject }: { project: Project, onUpdateProject: (p: Project) => void }) {
+  const [isDragging, setIsDragging] = useState(false);
+  const files = project.files || [];
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const uploadedFiles = e.target.files;
+    if (uploadedFiles) {
+      const newFiles: ProjectFile[] = (Array.from(uploadedFiles) as File[]).map(f => ({
+        id: Math.random().toString(36).substr(2, 9),
+        name: f.name,
+        size: f.size,
+        type: f.type,
+        url: '#', // In a real app, this would be a cloud URL
+        createdAt: new Date()
+      }));
+      onUpdateProject({ ...project, files: [...files, ...newFiles] });
+    }
+  };
+
+  const deleteFile = (id: string) => {
+    onUpdateProject({ ...project, files: files.filter(f => f.id !== id) });
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const getFileIcon = (type: string) => {
+    if (type.includes('image')) return <File size={20} className="text-indigo-500" />;
+    if (type.includes('pdf')) return <FileText size={20} className="text-red-500" />;
+    if (type.includes('code') || type.includes('json')) return <FileCode size={20} className="text-amber-500" />;
+    return <File size={20} className="text-slate-400" />;
+  };
+
+  return (
+    <div className="py-8 space-y-8">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900">Project Files</h2>
+          <p className="text-xs text-slate-400 mt-1 uppercase tracking-widest font-black">Shared documents and assets</p>
+        </div>
+        <label className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-black flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-lg active:scale-95 cursor-pointer">
+          <Plus size={16} />
+          Upload Files
+          <input type="file" multiple className="hidden" onChange={handleFileUpload} />
+        </label>
+      </div>
+
+      <div 
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setIsDragging(false);
+          const droppedFiles = e.dataTransfer.files;
+          if (droppedFiles) {
+            const newFiles: ProjectFile[] = (Array.from(droppedFiles) as File[]).map(f => ({
+              id: Math.random().toString(36).substr(2, 9),
+              name: f.name,
+              size: f.size,
+              type: f.type,
+              url: '#',
+              createdAt: new Date()
+            }));
+            onUpdateProject({ ...project, files: [...files, ...newFiles] });
+          }
+        }}
+        className={cn(
+          "bg-white rounded-[40px] border-2 border-dashed border-slate-200 p-20 flex flex-col items-center justify-center text-center transition-all",
+          isDragging && "border-indigo-500 bg-indigo-50 shadow-md transform scale-[0.99]"
+        )}
+      >
+         <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6">
+            <Paperclip size={32} className={cn("transition-all", isDragging ? "text-indigo-600 rotate-12" : "text-slate-200")} />
+         </div>
+         <h3 className="text-xl font-bold text-slate-900">Drop files here to upload</h3>
+         <p className="text-slate-500 max-w-xs mt-2">Upload project-related documents and assets. Your team can view and download them here.</p>
+         <label className="mt-8 text-indigo-600 font-bold hover:text-indigo-700 cursor-pointer underline underline-offset-4">
+           Browse from computer
+           <input type="file" multiple className="hidden" onChange={handleFileUpload} />
+         </label>
+      </div>
+
+      {files.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {files.map(file => (
+            <div key={file.id} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
+               <div className="flex items-start justify-between mb-4">
+                  <div className="p-3 bg-slate-50 rounded-2xl">
+                     {getFileIcon(file.type)}
+                  </div>
+                  <button onClick={() => deleteFile(file.id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
+                    <Trash2 size={16} />
+                  </button>
+               </div>
+               <h4 className="text-sm font-bold text-slate-900 truncate" title={file.name}>{file.name}</h4>
+               <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tighter">{formatFileSize(file.size)} • {format(file.createdAt, 'MMM d')}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

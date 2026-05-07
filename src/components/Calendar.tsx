@@ -296,6 +296,22 @@ export default function Calendar({
                 )}
                 Day
               </button>
+              <button 
+                onClick={() => setViewType('list')}
+                className={cn(
+                  "px-4 py-1 text-sm font-medium rounded-md transition-all duration-300 relative z-10",
+                  viewType === 'list' ? "text-slate-900" : "text-slate-400 hover:text-slate-600"
+                )}
+              >
+                {viewType === 'list' && (
+                  <motion.div 
+                    layoutId="view-bg" 
+                    className="absolute inset-0 bg-white rounded-md shadow-sm -z-10"
+                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                  />
+                )}
+                List
+              </button>
             </div>
           </div>
 
@@ -367,6 +383,14 @@ export default function Calendar({
                       onActivityClick={handleActivityClick}
                       isActivityOnDay={isActivityOnDay}
                       onSlotClick={handleSlotClick}
+                    />
+                 </motion.div>
+              )}
+              {viewType === 'list' && (
+                 <motion.div key="list" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="h-full">
+                    <ListView 
+                      activities={activities}
+                      onActivityClick={handleActivityClick}
                     />
                  </motion.div>
               )}
@@ -800,6 +824,81 @@ const DayView = ({
             />
           );
         })}
+      </div>
+    </div>
+  );
+};
+
+const ListView = ({ 
+  activities, 
+  onActivityClick 
+}: { 
+  activities: Activity[], 
+  onActivityClick: (activity: Activity) => void 
+}) => {
+  // Group activities by month and year
+  const groupedActivities = activities.reduce((groups: Record<string, Activity[]>, activity) => {
+    const monthYear = format(activity.date, 'MMMM yyyy');
+    if (!groups[monthYear]) {
+      groups[monthYear] = [];
+    }
+    groups[monthYear].push(activity);
+    return groups;
+  }, {});
+
+  // Sort months chronologically
+  const sortedMonths = Object.keys(groupedActivities).sort((a, b) => {
+    return new Date(a).getTime() - new Date(b).getTime();
+  });
+
+  return (
+    <div className="h-full bg-white border border-slate-200 rounded-[32px] overflow-y-auto no-scrollbar shadow-sm p-8">
+      <div className="max-w-3xl mx-auto">
+        {sortedMonths.map((monthYear, monthIndex) => (
+          <div key={monthYear} className={cn("mb-12", monthIndex !== 0 && "pt-8 border-t border-slate-100")}>
+            <h3 className="text-xl font-bold text-slate-900 mb-6 sticky top-0 bg-white/80 backdrop-blur-sm py-2 z-10">
+              {monthYear}
+            </h3>
+            <div className="space-y-4">
+              {groupedActivities[monthYear]
+                .sort((a, b) => {
+                  const dateCompare = a.date.getTime() - b.date.getTime();
+                  if (dateCompare !== 0) return dateCompare;
+                  return a.startTime.localeCompare(b.startTime);
+                })
+                .map((activity) => (
+                  <div 
+                    key={activity.id}
+                    onClick={() => onActivityClick(activity)}
+                    className="flex items-center group cursor-pointer py-3 border-b border-slate-50 last:border-b-0 hover:bg-slate-50 transition-colors rounded-xl px-4 -mx-4"
+                  >
+                    <div className="w-24 shrink-0">
+                      <span className="text-xs font-bold text-slate-400">
+                        {activity.startTime}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-bold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">
+                        {activity.title}
+                      </h4>
+                    </div>
+                    <div className="w-32 shrink-0 text-right">
+                       <span className="text-[10px] font-bold text-slate-400">
+                         {format(activity.date, 'MMM d, EEE')}
+                       </span>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        ))}
+        {activities.length === 0 && (
+          <div className="py-20 text-center">
+            <CalendarIcon size={48} className="mx-auto text-slate-200 mb-4" />
+            <h3 className="text-lg font-bold text-slate-900">No scheduled activities</h3>
+            <p className="text-slate-500 mt-1">Start by adding a new event to your calendar.</p>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -198,6 +198,10 @@ export default function App() {
     setProjectTasks(projectTasks.filter(t => t.projectId !== id));
   };
 
+  const updateProject = (updatedProject: Project) => {
+    setProjects(projects.map(p => p.id === updatedProject.id ? updatedProject : p));
+  };
+
   const addProjectTask = (taskData: Omit<ProjectTask, 'id' | 'subTasks' | 'comments' | 'createdAt'>) => {
     const newTask: ProjectTask = {
       ...taskData,
@@ -288,23 +292,6 @@ export default function App() {
                 <input type="file" className="hidden" accept=".json" onChange={handleImport} />
               </label>
             </div>
-            {activeTab === 'projects' ? (
-              <button 
-                onClick={() => setIsAddingProject(true)}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-indigo-700 transition-colors shadow-sm active:scale-95"
-              >
-                <Plus size={16} />
-                New Project
-              </button>
-            ) : (
-              <button 
-                onClick={() => openAddModal()}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-indigo-700 transition-colors shadow-sm active:scale-95"
-              >
-                <Plus size={16} />
-                Add Event
-              </button>
-            )}
           </div>
         </header>
 
@@ -357,6 +344,7 @@ export default function App() {
                 setIsAddingProject={setIsAddingProject}
                 onAddProject={addProject}
                 onDeleteProject={deleteProject}
+                onUpdateProject={updateProject}
                 onAddTask={addProjectTask}
                 onUpdateTask={updateProjectTask}
                 onDeleteTask={deleteProjectTask}

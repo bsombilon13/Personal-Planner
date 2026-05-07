@@ -19,7 +19,7 @@ export interface Activity {
   recurrence?: Recurrence;
 }
 
-export type CalendarViewType = 'month' | 'week' | 'day';
+export type CalendarViewType = 'month' | 'week' | 'day' | 'list';
 
 export type CategoryColors = Record<string, string>;
 
@@ -50,10 +50,37 @@ export interface ProjectTask {
   comments: Comment[];
 }
 
+export interface ProjectResource {
+  id: string;
+  title: string;
+  url: string;
+  type: 'link' | 'document' | 'video' | 'other';
+  createdAt: Date;
+}
+
+export interface ProjectNote {
+  id: string;
+  title: string;
+  content: string;
+  updatedAt: Date;
+}
+
+export interface ProjectFile {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  url: string;
+  createdAt: Date;
+}
+
 export interface Project {
   id: string;
   name: string;
   description?: string;
   color: string;
   createdAt: Date;
+  resources?: ProjectResource[];
+  notes?: ProjectNote[];
+  files?: ProjectFile[];
 }
