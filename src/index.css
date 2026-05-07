@@ -1,0 +1,94 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,700;0,900;1,700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Playfair Display", serif;
+}
+
+@layer base {
+  * {
+    @apply border-slate-200 selection:bg-indigo-100 selection:text-indigo-900;
+  }
+  
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Custom Scrollbar */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  @media print {
+    /* Hide everything except the main calendar container */
+    nav, aside, header, .no-print, button, .sidebar-link {
+      display: none !important;
+    }
+
+    body, main {
+      background: white !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: visible !important;
+      width: 100% !important;
+    }
+
+    .ml-16 {
+      margin-left: 0 !important;
+    }
+
+    /* Minimal B&W Calendar */
+    .calendar-container {
+      border: 1px solid black !important;
+      box-shadow: none !important;
+      border-radius: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+    }
+
+    .main-calendar-grid {
+       border: 1px solid black !important;
+    }
+
+    * {
+      color: black !important;
+      border-color: #000 !important;
+      background: transparent !important;
+      box-shadow: none !important;
+      text-shadow: none !important;
+    }
+
+    .activity-card {
+      border: 2px solid black !important;
+      background: #f0f0f0 !important; /* Very light gray for contrast */
+      color: black !important;
+      border-radius: 4px !important;
+    }
+
+    .activity-card * {
+      color: black !important;
+    }
+
+    /* Keep some contrast for the date headers */
+    .font-bold {
+      font-weight: 900 !important;
+    }
+
+    /* Force background colors to be white or light gray for clarity */
+    .bg-indigo-600, .bg-indigo-50, .bg-slate-50 {
+      background: white !important;
+      border: 1px solid #eee !important;
+    }
+
+    @page {
+      size: landscape;
+      margin: 1cm;
+    }
+  }
+}
