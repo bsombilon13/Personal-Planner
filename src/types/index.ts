@@ -94,6 +94,7 @@ export interface Project {
   description?: string;
   color: string;
   icon?: string;
+  coverImage?: string;
   createdAt: Date;
   category?: string;
   assets?: ProjectAsset[];

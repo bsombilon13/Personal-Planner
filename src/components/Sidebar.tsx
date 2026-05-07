@@ -27,6 +27,7 @@ import { Project } from '@/src/types';
 interface NavItemProps {
   key?: string | number;
   icon: React.ElementType;
+  imageUrl?: string;
   label: string;
   isActive?: boolean;
   onClick: () => void;
@@ -37,7 +38,7 @@ const ICONS_MAP: Record<string, React.ElementType> = {
   Briefcase, Code, Target, Zap, Smartphone, Globe, Sparkles, Award, Rocket, Paintbrush, Layout, FileText
 };
 
-const NavItem = ({ icon: Icon, label, isActive, onClick, isExpanded }: NavItemProps) => {
+const NavItem = ({ icon: Icon, imageUrl, label, isActive, onClick, isExpanded }: NavItemProps) => {
   return (
     <motion.button
       layout
@@ -50,7 +51,13 @@ const NavItem = ({ icon: Icon, label, isActive, onClick, isExpanded }: NavItemPr
           : "text-slate-400 hover:bg-slate-800 hover:text-slate-200 border-l-4 border-transparent"
       )}
     >
-      <Icon size={22} className={cn("shrink-0", isActive ? "text-indigo-400" : "text-slate-400 group-hover:text-slate-200")} />
+      <div className={cn("w-6 h-6 shrink-0 flex items-center justify-center rounded-lg overflow-hidden", isActive ? "text-indigo-400" : "text-slate-400 group-hover:text-slate-200")}>
+        {imageUrl ? (
+          <img src={imageUrl} alt={label} className="w-full h-full object-cover" />
+        ) : (
+          <Icon size={22} className="shrink-0" />
+        )}
+      </div>
       
       <AnimatePresence mode="wait">
         {isExpanded && (
@@ -196,6 +203,7 @@ export default function Sidebar({
               <NavItem 
                 key={project.id}
                 icon={Icon} 
+                imageUrl={project.coverImage}
                 label={project.name} 
                 isActive={activeTab === 'projects' && activeProjectId === project.id} 
                 onClick={() => {

@@ -219,7 +219,7 @@ export default function App() {
   };
 
   // Project Handlers
-  const addProject = (name: string, description: string, color?: string, icon?: string, category?: string) => {
+  const addProject = (name: string, description: string, color?: string, icon?: string, category?: string, coverImage?: string) => {
     const newProject: Project = {
       id: Math.random().toString(36).substr(2, 9),
       name,
@@ -227,6 +227,7 @@ export default function App() {
       category,
       color: color || '#4f46e5',
       icon: icon || 'Briefcase',
+      coverImage,
       createdAt: new Date()
     };
     setProjects([...projects, newProject]);

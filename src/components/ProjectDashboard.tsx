@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import Cropper, { Point, Area } from 'react-easy-crop';
 import { 
   Plus, 
   Trash2, 
@@ -46,7 +47,11 @@ import {
   ExternalLink,
   Download,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Image as ImageIcon,
+  Camera,
+  Upload,
+  Crop
 } from 'lucide-react';
 import { Project, ProjectTask, SubTask, Comment, ProjectAsset, ProjectNote, ProjectTaskStatus } from '@/src/types';
 import { cn, generateGoogleCalendarUrlForTask } from '@/src/lib/utils';
@@ -80,7 +85,7 @@ interface ProjectDashboardProps {
   setActiveProjectId: (id: string | null) => void;
   isAddingProject: boolean;
   setIsAddingProject: (val: boolean) => void;
-  onAddProject: (name: string, description: string, color?: string, icon?: string, category?: string) => void;
+  onAddProject: (name: string, description: string, color?: string, icon?: string, category?: string, coverImage?: string) => void;
   onDeleteProject: (id: string) => void;
   onUpdateProject: (project: Project) => void;
   onAddTask: (task: Omit<ProjectTask, 'id' | 'subTasks' | 'comments' | 'createdAt'>) => void;
@@ -161,6 +166,16 @@ export default function ProjectDashboard({
   const [newTaskAssignee, setNewTaskAssignee] = useState('');
   const [newTaskProjectId, setNewTaskProjectId] = useState<string>('');
   const [newTaskStatus, setNewTaskStatus] = useState<ProjectTaskStatus>('todo');
+  
+  // Image Cropping States
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [crop, setCrop] = useState<Point>({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+  const [isCropping, setIsCropping] = useState(false);
+  const [tempCroppedImage, setTempCroppedImage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [sortBy, setSortBy] = useState<'dueDate' | 'priority' | 'title' | 'createdAt'>('dueDate');
   const [sortOrientation, setSortOrientation] = useState<'asc' | 'desc'>('asc');
   
@@ -202,6 +217,62 @@ export default function ProjectDashboard({
       }
       return sortOrientation === 'asc' ? comparison : -comparison;
     });
+
+  const onCropComplete = useCallback((_: Area, _pixels: Area) => {
+    setCroppedAreaPixels(_pixels);
+  }, []);
+
+  const getCroppedImg = useCallback(async () => {
+    if (!imageSrc || !croppedAreaPixels) return null;
+
+    const canvas = document.createElement('canvas');
+    const img = new Image();
+    img.src = imageSrc;
+
+    await new Promise((resolve) => {
+      img.onload = resolve;
+    });
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    canvas.width = croppedAreaPixels.width;
+    canvas.height = croppedAreaPixels.height;
+
+    ctx.drawImage(
+      img,
+      croppedAreaPixels.x,
+      croppedAreaPixels.y,
+      croppedAreaPixels.width,
+      croppedAreaPixels.height,
+      0,
+      0,
+      croppedAreaPixels.width,
+      croppedAreaPixels.height
+    );
+
+    return canvas.toDataURL('image/jpeg');
+  }, [imageSrc, croppedAreaPixels]);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.addEventListener('load', () => {
+        setImageSrc(reader.result as string);
+        setIsCropping(true);
+      });
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleApplyCrop = async () => {
+    const croppedImage = await getCroppedImg();
+    if (croppedImage) {
+      setTempCroppedImage(croppedImage);
+      setIsCropping(false);
+    }
+  };
 
   const handleDragEnd = (event: any) => {
     const { active, over } = event;
@@ -247,10 +318,11 @@ export default function ProjectDashboard({
           description: newProjectDesc,
           category: newProjectCategory,
           color: selectedColor,
-          icon: selectedIcon
+          icon: selectedIcon,
+          coverImage: tempCroppedImage || undefined
         });
       } else {
-        onAddProject(newProjectName, newProjectDesc, selectedColor, selectedIcon, newProjectCategory);
+        onAddProject(newProjectName, newProjectDesc, selectedColor, selectedIcon, newProjectCategory, tempCroppedImage || undefined);
       }
       resetProjectForm();
     }
@@ -262,6 +334,8 @@ export default function ProjectDashboard({
     setNewProjectCategory('');
     setSelectedColor('#4f46e5');
     setSelectedIcon('Briefcase');
+    setTempCroppedImage(null);
+    setImageSrc(null);
     setIsAddingProject(false);
     setEditingProject(null);
   };
@@ -273,6 +347,7 @@ export default function ProjectDashboard({
     setNewProjectCategory(project.category || '');
     setSelectedColor(project.color);
     setSelectedIcon(project.icon || 'Briefcase');
+    setTempCroppedImage(project.coverImage || null);
     setIsAddingProject(true);
   };
 
@@ -393,8 +468,12 @@ export default function ProjectDashboard({
                   )}
                 >
                   <div className="flex items-center min-w-0">
-                    <div className="w-8 h-8 rounded-lg mr-3 shrink-0 flex items-center justify-center text-white shadow-sm" style={{ backgroundColor: project.color }}>
-                      <IconComponent size={16} />
+                    <div className="w-8 h-8 rounded-lg mr-3 shrink-0 flex items-center justify-center text-white shadow-sm overflow-hidden" style={{ backgroundColor: project.color }}>
+                      {project.coverImage ? (
+                        <img src={project.coverImage} className="w-full h-full object-cover" />
+                      ) : (
+                        <IconComponent size={16} />
+                      )}
                     </div>
                     <span className="text-sm font-bold truncate">{project.name}</span>
                   </div>
@@ -434,8 +513,12 @@ export default function ProjectDashboard({
                         transition={{ delay: 0.1 }}
                         className="flex items-center gap-3 mb-4"
                       >
-                         <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg" style={{ backgroundColor: activeProject.color }}>
-                            {React.createElement(getIconComponent(activeProject.icon || 'Briefcase'), { size: 24, strokeWidth: 2.5 })}
+                         <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg overflow-hidden" style={{ backgroundColor: activeProject.color }}>
+                            {activeProject.coverImage ? (
+                               <img src={activeProject.coverImage} className="w-full h-full object-cover" />
+                            ) : (
+                               React.createElement(getIconComponent(activeProject.icon || 'Briefcase'), { size: 24, strokeWidth: 2.5 })
+                            )}
                          </div>
                          <div>
                             <div className="flex items-center gap-2">
@@ -766,17 +849,43 @@ export default function ProjectDashboard({
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Icon</label>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Identity</label>
                     <div className="relative group/icon">
                       <div 
-                        className="w-[60px] h-[60px] bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 cursor-pointer border-2 border-transparent group-hover/icon:border-indigo-100 transition-all"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-[60px] h-[60px] bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 cursor-pointer border-2 border-transparent group-hover/icon:border-indigo-100 transition-all overflow-hidden relative"
                         style={{ color: selectedColor }}
                       >
-                        {React.createElement(getIconComponent(selectedIcon), { size: 28 })}
+                        {tempCroppedImage ? (
+                          <img src={tempCroppedImage} alt="Project Icon" className="w-full h-full object-cover" />
+                        ) : (
+                          React.createElement(getIconComponent(selectedIcon), { size: 28 })
+                        )}
+                        <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover/icon:opacity-100 flex items-center justify-center transition-opacity">
+                          <Camera size={18} className="text-white" />
+                        </div>
                       </div>
+                      <input 
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileChange}
+                        accept="image/*"
+                        className="hidden"
+                      />
                     </div>
                   </div>
                 </div>
+
+                {tempCroppedImage && (
+                  <button 
+                    type="button"
+                    onClick={() => setTempCroppedImage(null)}
+                    className="text-[9px] font-black text-rose-500 uppercase tracking-widest hover:text-rose-600 transition-colors flex items-center gap-1"
+                  >
+                    <Trash2 size={10} />
+                    Remove Custom Image
+                  </button>
+                )}
 
                 <div>
                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Select Icon</label>
@@ -856,6 +965,84 @@ export default function ProjectDashboard({
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Crop Modal */}
+      <AnimatePresence>
+        {isCropping && imageSrc && (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-xl">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-3xl w-full max-w-2xl h-[70vh] overflow-hidden flex flex-col shadow-2xl"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-indigo-50 rounded-xl text-indigo-600">
+                    <Crop size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900 tracking-tight">Crop Project Image</h3>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Adjust the frame to your liking</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsCropping(false)}
+                  className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="flex-1 relative bg-slate-100">
+                <Cropper
+                  image={imageSrc}
+                  crop={crop}
+                  zoom={zoom}
+                  aspect={1}
+                  onCropChange={setCrop}
+                  onCropComplete={onCropComplete}
+                  onZoomChange={setZoom}
+                />
+              </div>
+
+              <div className="p-6 bg-white border-t border-slate-100 flex items-center gap-6">
+                <div className="flex-1 flex flex-col gap-2">
+                  <div className="flex justify-between text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">
+                    <span>Zoom</span>
+                    <span>{Math.round(zoom * 100)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    value={zoom}
+                    min={1}
+                    max={3}
+                    step={0.1}
+                    aria-labelledby="Zoom"
+                    onChange={(e) => setZoom(Number(e.target.value))}
+                    className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                  />
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setIsCropping(false)}
+                    className="px-6 py-3 text-sm font-bold text-slate-500 hover:text-slate-700 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleApplyCrop}
+                    className="px-8 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-black hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 active:scale-95 flex items-center gap-2"
+                  >
+                    <CheckCircle2 size={18} />
+                    Apply Crop
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}
@@ -1390,8 +1577,12 @@ function TaskDetailModal({ task, projects, onUpdate, onClose }: {
                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 px-1">Project</h4>
                 <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white" style={{ backgroundColor: projects.find(p => p.id === task.projectId)?.color }}>
-                        <Layout size={18} />
+                      <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white overflow-hidden" style={{ backgroundColor: projects.find(p => p.id === task.projectId)?.color }}>
+                        {projects.find(p => p.id === task.projectId)?.coverImage ? (
+                          <img src={projects.find(p => p.id === task.projectId)?.coverImage} className="w-full h-full object-cover" />
+                        ) : (
+                          <Layout size={18} />
+                        )}
                       </div>
                       <div>
                         <p className="text-xs font-black text-slate-900">{projects.find(p => p.id === task.projectId)?.name}</p>
@@ -1821,6 +2012,25 @@ function NotesView({ project, onUpdateProject }: { project: Project, onUpdatePro
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullScreen) {
+        setIsFullScreen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullScreen]);
+
+  const stats = useMemo(() => {
+    const notes = project.notes || [];
+    const activeNote = notes.find(n => n.id === activeNoteId);
+    const words = activeNote?.content.split(/\s+/).filter(Boolean).length || 0;
+    const chars = activeNote?.content.length || 0;
+    const readTime = Math.max(1, Math.ceil(words / 200));
+    return { words, chars, readTime };
+  }, [project.notes, activeNoteId]);
+
   const notes = project.notes || [];
   const activeNote = notes.find(n => n.id === activeNoteId);
 
@@ -2087,16 +2297,29 @@ function NotesView({ project, onUpdateProject }: { project: Project, onUpdatePro
                />
              )}
              
-             <div className="mt-8 pt-8 border-t border-slate-50 flex justify-between items-center">
-                <div className="flex items-center gap-2 text-[10px] font-black text-slate-300 uppercase tracking-widest">
-                  <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  Synced
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">{activeNote.content.split(/\s+/).filter(Boolean).length} Words</span>
-                  <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">{activeNote.content.length} Characters</span>
-                </div>
-             </div>
+             <div className={cn(
+                "mt-8 pt-8 border-t border-slate-50 flex justify-between items-center transition-all",
+                isFullScreen ? "opacity-60 hover:opacity-100" : ""
+              )}>
+                 <div className="flex items-center gap-2 text-[10px] font-black text-slate-300 uppercase tracking-widest">
+                   <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                   Synced
+                 </div>
+                 <div className="flex items-center gap-6">
+                    <div className="flex flex-col items-end px-4 border-r border-slate-100">
+                      <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-1">Time</span>
+                      <span className="text-[10px] font-bold text-slate-600 leading-none">{stats.readTime} min</span>
+                    </div>
+                    <div className="flex flex-col items-end px-4 border-r border-slate-100">
+                      <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-1">Words</span>
+                      <span className="text-[10px] font-bold text-slate-600 leading-none">{stats.words}</span>
+                    </div>
+                    <div className="flex flex-col items-end pl-4">
+                      <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-1">Chars</span>
+                      <span className="text-[10px] font-bold text-slate-600 leading-none">{stats.chars}</span>
+                    </div>
+                 </div>
+              </div>
           </div>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center p-20 text-center">
