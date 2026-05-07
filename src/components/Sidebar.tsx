@@ -23,7 +23,9 @@ interface NavItemProps {
 
 const NavItem = ({ icon: Icon, label, isActive, onClick, isExpanded }: NavItemProps) => {
   return (
-    <button
+    <motion.button
+      layout
+      whileTap={{ scale: 0.95 }}
       onClick={onClick}
       className={cn(
         "group relative flex items-center w-full p-3 my-1 transition-all duration-200",
@@ -53,7 +55,7 @@ const NavItem = ({ icon: Icon, label, isActive, onClick, isExpanded }: NavItemPr
           {label}
         </div>
       )}
-    </button>
+    </motion.button>
   );
 };
 
@@ -97,7 +99,7 @@ interface SidebarProps {
   setActiveTab: (tab: string) => void;
 }
 
-export default function Sidebar({ activeTab, setActiveTab, onAddEvent }: SidebarProps & { onAddEvent: () => void }) {
+export default function Sidebar({ activeTab, setActiveTab, onAddEvent, onAddProject }: SidebarProps & { onAddEvent: () => void, onAddProject: () => void }) {
   const [isHovered, setIsHovered] = useState(false);
 
   return (
@@ -151,12 +153,21 @@ export default function Sidebar({ activeTab, setActiveTab, onAddEvent }: Sidebar
         </CollapsibleSection>
 
         <CollapsibleSection title="Workspace" isExpanded={isHovered}>
-          <NavItem 
-            icon={PlusCircle} 
-            label="New Event" 
-            onClick={onAddEvent}
-            isExpanded={isHovered}
-          />
+          {activeTab === 'projects' ? (
+            <NavItem 
+              icon={PlusCircle} 
+              label="New Project" 
+              onClick={onAddProject}
+              isExpanded={isHovered}
+            />
+          ) : (
+            <NavItem 
+              icon={PlusCircle} 
+              label="New Event" 
+              onClick={onAddEvent}
+              isExpanded={isHovered}
+            />
+          )}
           <NavItem 
             icon={Users} 
             label="Team" 

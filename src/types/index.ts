@@ -29,6 +29,13 @@ export interface SubTask {
   isCompleted: boolean;
 }
 
+export interface Comment {
+  id: string;
+  authorName: string;
+  text: string;
+  createdAt: Date;
+}
+
 export interface ProjectTask {
   id: string;
   projectId: string;
@@ -37,7 +44,10 @@ export interface ProjectTask {
   status: 'todo' | 'in-progress' | 'completed';
   priority: 'low' | 'medium' | 'high';
   dueDate?: Date;
+  assignee?: string;
+  createdAt: Date;
   subTasks: SubTask[];
+  comments: Comment[];
 }
 
 export interface Project {

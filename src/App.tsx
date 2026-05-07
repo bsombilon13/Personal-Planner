@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, ChangeEvent } from 'react';
 import Sidebar from '@/src/components/Sidebar';
 import Dashboard from '@/src/components/Dashboard';
 import Calendar from '@/src/components/Calendar';
@@ -11,7 +11,21 @@ import ProjectDashboard from '@/src/components/ProjectDashboard';
 import ActivityModal from '@/src/components/ActivityModal';
 import { Activity, CategoryColors, Project, ProjectTask } from '@/src/types';
 import { AnimatePresence, motion } from 'motion/react';
-import { Plus } from 'lucide-react';
+import { Plus, Download, Upload } from 'lucide-react';
+
+const STORAGE_KEYS = {
+  ACTIVITIES: 'event_master_activities',
+  PROJECTS: 'event_master_projects',
+  TASKS: 'event_master_tasks',
+  COLORS: 'event_master_colors'
+};
+
+const revivifyDates = (key: string, value: any) => {
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d*)?Z$/.test(value)) {
+    return new Date(value);
+  }
+  return value;
+};
 
 const DEFAULT_CATEGORY_COLORS: CategoryColors = {
   'Work': '#4f46e5',    // indigo-600
@@ -69,18 +83,51 @@ const INITIAL_ACTIVITIES: Activity[] = [
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [activities, setActivities] = useState<Activity[]>(INITIAL_ACTIVITIES);
-  const [categoryColors, setCategoryColors] = useState<CategoryColors>(DEFAULT_CATEGORY_COLORS);
   
-  // Project Management State
-  const [projects, setProjects] = useState<Project[]>([
-    { id: 'p1', name: 'Brand Identity', description: 'Visual refresh for the 2026 launch.', color: '#4f46e5', createdAt: new Date() },
-    { id: 'p2', name: 'Mobile App', description: 'Rebuilding the core customer experience.', color: '#10b981', createdAt: new Date() },
-  ]);
-  const [projectTasks, setProjectTasks] = useState<ProjectTask[]>([
-    { id: 't1', projectId: 'p1', title: 'Logo Design', status: 'completed', priority: 'high', subTasks: [{ id: 'st1', title: 'Brainstorming', isCompleted: true }, { id: 'st2', title: 'Sketching', isCompleted: true }] },
-    { id: 't2', projectId: 'p1', title: 'Color Palette', status: 'in-progress', priority: 'medium', subTasks: [] },
-  ]);
+  // Load initial state from localStorage
+  const [activities, setActivities] = useState<Activity[]>(() => {
+    const stored = localStorage.getItem(STORAGE_KEYS.ACTIVITIES);
+    return stored ? JSON.parse(stored, revivifyDates) : INITIAL_ACTIVITIES;
+  });
+  
+  const [categoryColors, setCategoryColors] = useState<CategoryColors>(() => {
+    const stored = localStorage.getItem(STORAGE_KEYS.COLORS);
+    return stored ? JSON.parse(stored) : DEFAULT_CATEGORY_COLORS;
+  });
+  
+  const [projects, setProjects] = useState<Project[]>(() => {
+    const stored = localStorage.getItem(STORAGE_KEYS.PROJECTS);
+    return stored ? JSON.parse(stored, revivifyDates) : [
+      { id: 'p1', name: 'Brand Identity', description: 'Visual refresh for the 2026 launch.', color: '#4f46e5', createdAt: new Date() },
+      { id: 'p2', name: 'Mobile App', description: 'Rebuilding the core customer experience.', color: '#10b981', createdAt: new Date() },
+    ];
+  });
+  
+  const [projectTasks, setProjectTasks] = useState<ProjectTask[]>(() => {
+    const stored = localStorage.getItem(STORAGE_KEYS.TASKS);
+    return stored ? JSON.parse(stored, revivifyDates) : [
+      { id: 't1', projectId: 'p1', title: 'Logo Design', status: 'completed', priority: 'high', dueDate: new Date(new Date().setDate(new Date().getDate() + 2)), assignee: 'John Doe', createdAt: new Date(new Date().setDate(new Date().getDate() - 5)), subTasks: [{ id: 'st1', title: 'Brainstorming', isCompleted: true }, { id: 'st2', title: 'Sketching', isCompleted: true }], comments: [{ id: 'c1', authorName: 'John Doe', text: 'Great first pass on the sketches!', createdAt: new Date() }] },
+      { id: 't2', projectId: 'p1', title: 'Color Palette', status: 'in-progress', priority: 'medium', dueDate: new Date(new Date().setDate(new Date().getDate() + 5)), assignee: 'Jane Smith', createdAt: new Date(new Date().setDate(new Date().getDate() - 3)), subTasks: [], comments: [] },
+    ];
+  });
+
+  // Sync to localStorage
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.ACTIVITIES, JSON.stringify(activities));
+  }, [activities]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(projects));
+  }, [projects]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(projectTasks));
+  }, [projectTasks]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.COLORS, JSON.stringify(categoryColors));
+  }, [categoryColors]);
+  const [isAddingProject, setIsAddingProject] = useState(false);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -135,12 +182,12 @@ export default function App() {
   };
 
   // Project Handlers
-  const addProject = (name: string, description: string) => {
+  const addProject = (name: string, description: string, color?: string) => {
     const newProject: Project = {
       id: Math.random().toString(36).substr(2, 9),
       name,
       description,
-      color: '#' + Math.floor(Math.random()*16777215).toString(16),
+      color: color || '#' + Math.floor(Math.random()*16777215).toString(16),
       createdAt: new Date()
     };
     setProjects([...projects, newProject]);
@@ -151,11 +198,13 @@ export default function App() {
     setProjectTasks(projectTasks.filter(t => t.projectId !== id));
   };
 
-  const addProjectTask = (taskData: Omit<ProjectTask, 'id' | 'subTasks'>) => {
+  const addProjectTask = (taskData: Omit<ProjectTask, 'id' | 'subTasks' | 'comments' | 'createdAt'>) => {
     const newTask: ProjectTask = {
       ...taskData,
       id: Math.random().toString(36).substr(2, 9),
-      subTasks: []
+      createdAt: new Date(),
+      subTasks: [],
+      comments: []
     };
     setProjectTasks([...projectTasks, newTask]);
   };
@@ -168,9 +217,55 @@ export default function App() {
     setProjectTasks(projectTasks.filter(t => t.id !== id));
   };
 
+  const handleExport = () => {
+    const data = {
+      activities,
+      projects,
+      projectTasks,
+      categoryColors,
+      exportedAt: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `event-master-export-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string, revivifyDates);
+        if (data.activities && Array.isArray(data.activities)) setActivities(data.activities);
+        if (data.projects && Array.isArray(data.projects)) setProjects(data.projects);
+        if (data.projectTasks && Array.isArray(data.projectTasks)) setProjectTasks(data.projectTasks);
+        if (data.categoryColors) setCategoryColors(data.categoryColors);
+        alert('Data imported successfully!');
+      } catch (err) {
+        console.error('Import failed:', err);
+        alert('Failed to import data. Please ensure the file is a valid export JSON.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = ''; // Reset input
+  };
+
   return (
     <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-900">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onAddEvent={() => openAddModal()} />
+      <Sidebar 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        onAddEvent={() => openAddModal()} 
+        onAddProject={() => setIsAddingProject(true)}
+      />
       
       <main className="ml-16 transition-all duration-300 min-h-screen flex flex-col">
         <header className="h-16 border-b border-slate-200 bg-white sticky top-0 z-40 px-8 flex items-center justify-between">
@@ -180,13 +275,36 @@ export default function App() {
              </h1>
           </div>
           <div className="flex items-center space-x-4">
-            <button 
-              onClick={() => openAddModal()}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-indigo-700 transition-colors shadow-sm active:scale-95"
-            >
-              <Plus size={16} />
-              Add Event
-            </button>
+            <div className="flex items-center bg-slate-100 rounded-lg p-1">
+              <button 
+                onClick={handleExport}
+                className="p-2 text-slate-500 hover:text-slate-900 hover:bg-white rounded-md transition-all"
+                title="Export Data"
+              >
+                <Download size={18} />
+              </button>
+              <label className="p-2 text-slate-500 hover:text-slate-900 hover:bg-white rounded-md transition-all cursor-pointer" title="Import Data">
+                <Upload size={18} />
+                <input type="file" className="hidden" accept=".json" onChange={handleImport} />
+              </label>
+            </div>
+            {activeTab === 'projects' ? (
+              <button 
+                onClick={() => setIsAddingProject(true)}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-indigo-700 transition-colors shadow-sm active:scale-95"
+              >
+                <Plus size={16} />
+                New Project
+              </button>
+            ) : (
+              <button 
+                onClick={() => openAddModal()}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-indigo-700 transition-colors shadow-sm active:scale-95"
+              >
+                <Plus size={16} />
+                Add Event
+              </button>
+            )}
           </div>
         </header>
 
@@ -235,6 +353,8 @@ export default function App() {
               <ProjectDashboard 
                 projects={projects}
                 tasks={projectTasks}
+                isAddingProject={isAddingProject}
+                setIsAddingProject={setIsAddingProject}
                 onAddProject={addProject}
                 onDeleteProject={deleteProject}
                 onAddTask={addProjectTask}

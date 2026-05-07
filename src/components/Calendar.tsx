@@ -32,9 +32,9 @@ import {
   Printer
 } from 'lucide-react';
 import { Activity, CalendarViewType, CategoryColors } from '@/src/types';
-import { cn, isActivityOnDay, calculateEndTime } from '@/src/lib/utils';
+import { cn, isActivityOnDay, calculateEndTime, generateGoogleCalendarUrl } from '@/src/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
-import { Palette, GripVertical } from 'lucide-react';
+import { Palette, GripVertical, Share2 } from 'lucide-react';
 import { 
   DndContext, 
   DragEndEvent, 
@@ -164,37 +164,42 @@ export default function Calendar({
         </div>
         
         <div className="flex-1 overflow-y-auto space-y-0 no-scrollbar">
-          {activities
-            .sort((a, b) => a.date.getTime() - b.date.getTime())
-            .map(activity => (
-              <div 
-                key={activity.id} 
-                className={cn(
-                  "p-4 border-b border-slate-200 bg-white hover:bg-indigo-50 transition-all cursor-pointer group",
-                  isActivityOnDay(activity, selectedDay) && "border-l-4 border-l-indigo-500 bg-indigo-50/50"
-                )}
-                onClick={() => handleActivityClick(activity)}
-              >
-                <div className="flex justify-between items-start mb-1">
-                  <span 
-                    className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider text-white flex items-center gap-2"
-                    style={{ backgroundColor: categoryColors[activity.category] || '#6366f1' }}
-                  >
-                    {activity.category}
-                    {activity.recurrence && activity.recurrence.frequency !== 'none' && (
-                      <span className="bg-white/20 px-1 rounded text-[8px] tracking-normal lowercase italic">
-                        {activity.recurrence.frequency}
-                      </span>
-                    )}
-                  </span>
-                </div>
-                <h4 className="text-sm font-semibold text-slate-800 mb-1">{activity.title}</h4>
-                <div className="flex items-center text-[10px] text-slate-400 font-medium">
-                   {format(activity.date, 'MMM d, yyyy')} • {activity.startTime}
-                </div>
-              </div>
-            ))
-          }
+          <AnimatePresence mode="popLayout">
+            {activities
+              .sort((a, b) => a.date.getTime() - b.date.getTime())
+              .map((activity, index) => (
+                <motion.div 
+                  key={activity.id} 
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  className={cn(
+                    "p-4 border-b border-slate-200 bg-white hover:bg-indigo-50 transition-all cursor-pointer group",
+                    isActivityOnDay(activity, selectedDay) && "border-l-4 border-l-indigo-500 bg-indigo-50/50"
+                  )}
+                  onClick={() => handleActivityClick(activity)}
+                >
+                  <div className="flex justify-between items-start mb-1">
+                    <span 
+                      className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider text-white flex items-center gap-2"
+                      style={{ backgroundColor: categoryColors[activity.category] || '#6366f1' }}
+                    >
+                      {activity.category}
+                      {activity.recurrence && activity.recurrence.frequency !== 'none' && (
+                        <span className="bg-white/20 px-1 rounded text-[8px] tracking-normal lowercase italic">
+                          {activity.recurrence.frequency}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-semibold text-slate-800 mb-1">{activity.title}</h4>
+                  <div className="flex items-center text-[10px] text-slate-400 font-medium">
+                     {format(activity.date, 'MMM d, yyyy')} • {activity.startTime}
+                  </div>
+                </motion.div>
+              ))
+            }
+          </AnimatePresence>
         </div>
 
         {/* Category Settings */}
@@ -246,28 +251,49 @@ export default function Calendar({
               <button 
                 onClick={() => setViewType('month')}
                 className={cn(
-                  "px-4 py-1 text-sm font-medium rounded-md transition-all duration-200",
-                  viewType === 'month' ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                  "px-4 py-1 text-sm font-medium rounded-md transition-all duration-300 relative z-10",
+                  viewType === 'month' ? "text-slate-900" : "text-slate-400 hover:text-slate-600"
                 )}
               >
+                {viewType === 'month' && (
+                  <motion.div 
+                    layoutId="view-bg" 
+                    className="absolute inset-0 bg-white rounded-md shadow-sm -z-10"
+                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                  />
+                )}
                 Month
               </button>
               <button 
                 onClick={() => setViewType('week')}
                 className={cn(
-                  "px-4 py-1 text-sm font-medium rounded-md transition-all duration-200",
-                  viewType === 'week' ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                  "px-4 py-1 text-sm font-medium rounded-md transition-all duration-300 relative z-10",
+                  viewType === 'week' ? "text-slate-900" : "text-slate-400 hover:text-slate-600"
                 )}
               >
+                {viewType === 'week' && (
+                  <motion.div 
+                    layoutId="view-bg" 
+                    className="absolute inset-0 bg-white rounded-md shadow-sm -z-10"
+                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                  />
+                )}
                 Week
               </button>
               <button 
                 onClick={() => setViewType('day')}
                 className={cn(
-                  "px-4 py-1 text-sm font-medium rounded-md transition-all duration-200",
-                  viewType === 'day' ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                  "px-4 py-1 text-sm font-medium rounded-md transition-all duration-300 relative z-10",
+                  viewType === 'day' ? "text-slate-900" : "text-slate-400 hover:text-slate-600"
                 )}
               >
+                {viewType === 'day' && (
+                  <motion.div 
+                    layoutId="view-bg" 
+                    className="absolute inset-0 bg-white rounded-md shadow-sm -z-10"
+                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                  />
+                )}
                 Day
               </button>
             </div>
@@ -399,13 +425,25 @@ export default function Calendar({
                 
                 <div>
                   <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Status</h4>
-                  <div className={cn(
-                    "px-4 py-2 rounded-xl text-xs font-bold w-fit border",
-                    selectedActivity.status === 'upcoming' ? "bg-amber-50 text-amber-600 border-amber-100" :
-                    selectedActivity.status === 'in-progress' ? "bg-blue-50 text-blue-600 border-blue-100" :
-                    "bg-emerald-50 text-emerald-600 border-emerald-100"
-                  )}>
-                    {selectedActivity.status.toUpperCase()}
+                  <div className="flex items-center justify-between">
+                    <div className={cn(
+                      "px-4 py-2 rounded-xl text-xs font-bold w-fit border",
+                      selectedActivity.status === 'upcoming' ? "bg-amber-50 text-amber-600 border-amber-100" :
+                      selectedActivity.status === 'in-progress' ? "bg-blue-50 text-blue-600 border-blue-100" :
+                      "bg-emerald-50 text-emerald-600 border-emerald-100"
+                    )}>
+                      {selectedActivity.status.toUpperCase()}
+                    </div>
+
+                    <a 
+                      href={generateGoogleCalendarUrl(selectedActivity)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-bold border border-indigo-100 hover:bg-indigo-100 transition-colors"
+                    >
+                      <Share2 size={14} />
+                      Add to Google Calendar
+                    </a>
                   </div>
                 </div>
               </div>
