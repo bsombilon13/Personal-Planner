@@ -25,6 +25,44 @@
     scrollbar-width: none;
   }
 
+  /* Markdown Styles */
+  .markdown-body {
+    @apply text-slate-700 leading-relaxed max-w-none text-sm;
+  }
+  .markdown-body h1 {
+    @apply text-3xl font-black text-slate-900 mt-6 mb-4;
+  }
+  .markdown-body h2 {
+    @apply text-2xl font-black text-slate-900 mt-5 mb-3;
+  }
+  .markdown-body h3 {
+    @apply text-xl font-bold text-slate-900 mt-4 mb-2;
+  }
+  .markdown-body p {
+    @apply mb-4;
+  }
+  .markdown-body ul {
+    @apply list-disc list-inside mb-4 space-y-1;
+  }
+  .markdown-body ol {
+    @apply list-decimal list-inside mb-4 space-y-1;
+  }
+  .markdown-body blockquote {
+    @apply border-l-4 border-slate-200 pl-4 italic text-slate-500 my-4;
+  }
+  .markdown-body code {
+    @apply bg-slate-100 px-1 rounded font-mono text-sm;
+  }
+  .markdown-body pre {
+    @apply bg-slate-50 p-4 rounded-2xl font-mono text-sm overflow-x-auto my-4 border border-slate-100;
+  }
+  .markdown-body strong {
+    @apply font-black text-slate-900;
+  }
+  .markdown-body em {
+    @apply italic;
+  }
+
   @media print {
     /* Hide everything except the main calendar container */
     nav, aside, header, .no-print, button, .sidebar-link {

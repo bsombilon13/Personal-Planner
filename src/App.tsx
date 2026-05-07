@@ -9,15 +9,17 @@ import Dashboard from '@/src/components/Dashboard';
 import Calendar from '@/src/components/Calendar';
 import ProjectDashboard from '@/src/components/ProjectDashboard';
 import ActivityModal from '@/src/components/ActivityModal';
-import { Activity, CategoryColors, Project, ProjectTask } from '@/src/types';
+import { Activity, CategoryColors, Project, ProjectTask, GlobalNote } from '@/src/types';
 import { AnimatePresence, motion } from 'motion/react';
-import { Plus, Download, Upload } from 'lucide-react';
+import { Plus, Download, Upload, StickyNote } from 'lucide-react';
+import NotesView from '@/src/components/NotesView';
 
 const STORAGE_KEYS = {
   ACTIVITIES: 'event_master_activities',
   PROJECTS: 'event_master_projects',
   TASKS: 'event_master_tasks',
-  COLORS: 'event_master_colors'
+  COLORS: 'event_master_colors',
+  NOTES: 'event_master_global_notes'
 };
 
 const revivifyDates = (key: string, value: any) => {
@@ -119,6 +121,29 @@ export default function App() {
     ];
   });
 
+  const [globalNotes, setGlobalNotes] = useState<GlobalNote[]>(() => {
+    const stored = localStorage.getItem(STORAGE_KEYS.NOTES);
+    if (stored) return JSON.parse(stored, revivifyDates);
+    return [
+      {
+        id: 'n1',
+        title: 'Q4 Strategy Brainstorming',
+        content: '# Q4 Goals\n\n- Expand market reach\n- Launch new mobile features\n- Improve retention by 15%\n\n### Key Pillars\n1. **Innovation**: Focus on AI-driven planning tools.\n2. **Community**: Build stronger user forums and feedback loops.',
+        category: 'Brainstorming',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      },
+      {
+        id: 'n2',
+        title: 'Weekly Sync Notes - May 7',
+        content: '## Attendees\n- Bryan\n- Sarah\n- Mike\n\n## Discussion\n- Discussed the new dashboard layout.\n- Decided to move forward with the Apple Notes style for the global journal.\n- Action item: Update the sidebar to include the new entry point.',
+        category: 'Meeting',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }
+    ];
+  });
+
   // Sync to localStorage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.ACTIVITIES, JSON.stringify(activities));
@@ -135,6 +160,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.COLORS, JSON.stringify(categoryColors));
   }, [categoryColors]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.NOTES, JSON.stringify(globalNotes));
+  }, [globalNotes]);
   const [isAddingProject, setIsAddingProject] = useState(false);
 
   // Modal State
@@ -286,8 +315,8 @@ export default function App() {
       <main className="ml-16 transition-all duration-300 min-h-screen flex flex-col">
         <header className="h-16 border-b border-slate-200 bg-white sticky top-0 z-40 px-8 flex items-center justify-between">
           <div className="flex items-center space-x-6">
-             <h1 className="text-xl font-bold text-slate-800 tracking-tight">
-               {activeTab === 'dashboard' ? 'Dashboard Overview' : activeTab === 'calendar' ? 'Calendarization' : 'Project Management'}
+            <h1 className="text-xl font-bold text-slate-800 tracking-tight">
+               {activeTab === 'dashboard' ? 'Dashboard Overview' : activeTab === 'calendar' ? 'Calendarization' : activeTab === 'notes' ? 'Journal & Brainstorming' : 'Project Management'}
              </h1>
           </div>
           <div className="flex items-center space-x-4">
@@ -365,6 +394,20 @@ export default function App() {
                 onAddTask={addProjectTask}
                 onUpdateTask={updateProjectTask}
                 onDeleteTask={deleteProjectTask}
+              />
+            </motion.div>
+          ) : activeTab === 'notes' ? (
+            <motion.div
+              key="notes"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.3 }}
+              className="h-full flex-1"
+            >
+              <NotesView 
+                notes={globalNotes} 
+                setNotes={setGlobalNotes} 
               />
             </motion.div>
           ) : null}

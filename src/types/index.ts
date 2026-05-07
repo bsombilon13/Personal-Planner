@@ -70,6 +70,15 @@ export interface ProjectNote {
   updatedAt: Date;
 }
 
+export interface GlobalNote {
+  id: string;
+  title: string;
+  content: string;
+  category: 'Brainstorming' | 'Meeting' | 'Personal' | 'Strategy' | 'Other';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface ProjectFile {
   id: string;
   name: string;

@@ -120,7 +120,7 @@ export default function Dashboard({ activities, categoryColors }: DashboardProps
         {/* Sidebar Summary */}
         <section className="space-y-6">
           <h2 className="text-xl font-bold text-slate-900 px-2">Weekly Goal</h2>
-          <div className="bg-indigo-900 p-8 rounded-[40px] text-white shadow-xl shadow-indigo-200 overflow-hidden relative group">
+          <div className="bg-indigo-900 p-8 rounded-2xl text-white shadow-xl shadow-indigo-200 overflow-hidden relative group">
             <div className="relative z-10">
               <p className="text-indigo-200 text-xs font-bold uppercase tracking-widest mb-2">My Progress</p>
               <h3 className="text-3xl font-bold mb-6">Master Planner 2.0</h3>
@@ -150,7 +150,7 @@ export default function Dashboard({ activities, categoryColors }: DashboardProps
             <div className="absolute bottom-0 left-0 w-24 h-24 bg-indigo-800 rounded-full translate-y-1/2 -translate-x-1/2 blur-xl opacity-30" />
           </div>
 
-          <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200/60 dashed">
+          <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200/60 dashed">
             <h4 className="text-sm font-bold text-slate-900 mb-4">Quick Insights</h4>
             <div className="space-y-4">
               <div className="flex items-start">

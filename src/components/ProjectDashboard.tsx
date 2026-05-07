@@ -44,11 +44,15 @@ import {
   Heading1,
   Heading2,
   ExternalLink,
-  Download
+  Download,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import { Project, ProjectTask, SubTask, Comment, ProjectAsset, ProjectNote, ProjectTaskStatus } from '@/src/types';
 import { cn, generateGoogleCalendarUrlForTask } from '@/src/lib/utils';
 import { format } from 'date-fns';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   DndContext,
   closestCorners,
@@ -473,7 +477,7 @@ export default function ProjectDashboard({
                       <div className="flex flex-wrap items-center gap-6 mt-8 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
                         <div className="flex flex-col gap-2">
                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1">Status</span>
-                          <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                          <div className="flex items-center gap-1.5 flex-wrap pb-1">
                             {['todo', 'in-progress', 'pending', 'under-review', 'follow-up', 'completed'].map(status => (
                               <button 
                                 key={status}
@@ -600,7 +604,7 @@ export default function ProjectDashboard({
                       transition={{ delay: 0.25 }}
                       className="flex gap-4"
                     >
-                      <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm min-w-[140px]">
+                      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm min-w-[140px]">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Progress</p>
                         <div className="flex items-baseline gap-1">
                           <span className="text-2xl font-black text-slate-900">
@@ -642,7 +646,7 @@ export default function ProjectDashboard({
                             {(['todo', 'in-progress', 'pending', 'under-review', 'follow-up', 'completed'] as ProjectTaskStatus[]).map((status, index) => (
                               <motion.div
                                 key={status}
-                                className="min-w-[320px] lg:flex-1"
+                                className="min-w-[260px] lg:flex-1"
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: 0.1 + index * 0.1 }}
@@ -728,7 +732,7 @@ export default function ProjectDashboard({
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
-              className="relative bg-white rounded-[32px] w-full max-w-md shadow-2xl overflow-hidden p-8"
+              className="relative bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden p-8"
             >
               <div className="flex items-center justify-between mb-8">
                 <h2 className="text-2xl font-black text-slate-900 tracking-tight">
@@ -776,7 +780,7 @@ export default function ProjectDashboard({
 
                 <div>
                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Select Icon</label>
-                   <div className="grid grid-cols-6 gap-2 p-4 bg-slate-50 rounded-3xl border border-slate-100">
+                   <div className="grid grid-cols-6 gap-2 p-4 bg-slate-50 rounded-2xl border border-slate-100">
                       {ICONS.map(item => (
                         <button
                           key={item.name}
@@ -872,7 +876,7 @@ export default function ProjectDashboard({
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
-              className="relative bg-white rounded-[32px] w-full max-w-lg shadow-2xl overflow-hidden p-8"
+              className="relative bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden p-8"
             >
               <div className="flex items-center justify-between mb-8">
                 <h2 className="text-2xl font-black text-slate-900 tracking-tight">Add Task</h2>
@@ -1007,7 +1011,7 @@ function TaskColumn({ status, projectTasks, onUpdateTask, onDeleteTask, setViewi
   };
 
   return (
-    <div ref={setNodeRef} className="flex flex-col h-[calc(100vh-320px)] bg-slate-100/40 rounded-3xl p-3 border border-slate-200/60">
+    <div ref={setNodeRef} className="flex flex-col h-[calc(100vh-320px)] bg-slate-100/40 rounded-2xl p-3 border border-slate-200/60">
       <div className="flex items-center justify-between mb-4 px-2">
         <div className="flex items-center gap-2">
           <div className={cn(
@@ -1115,7 +1119,7 @@ function TaskDetailModal({ task, projects, onUpdate, onClose }: {
         initial={{ scale: 0.95, opacity: 0, y: 20 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.95, opacity: 0, y: 20 }}
-        className="relative bg-white rounded-[40px] w-full max-w-4xl h-[80vh] shadow-2xl overflow-hidden flex flex-col"
+        className="relative bg-white rounded-2xl w-full max-w-4xl h-[80vh] shadow-2xl overflow-hidden flex flex-col"
       >
         <div className="p-8 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -1315,7 +1319,7 @@ function TaskDetailModal({ task, projects, onUpdate, onClose }: {
           <div className="w-1/3 bg-slate-50 p-8 space-y-8 flex flex-col">
              <div>
                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 px-1">Properties</h4>
-                <div className="bg-white rounded-[32px] p-6 shadow-sm border border-slate-100 space-y-6">
+                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 space-y-6">
                    <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <User size={14} className="text-slate-400" />
@@ -1384,7 +1388,7 @@ function TaskDetailModal({ task, projects, onUpdate, onClose }: {
 
              <div className="flex-1">
                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 px-1">Project</h4>
-                <div className="bg-white rounded-[32px] p-6 shadow-sm border border-slate-100">
+                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
                    <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white" style={{ backgroundColor: projects.find(p => p.id === task.projectId)?.color }}>
                         <Layout size={18} />
@@ -1479,7 +1483,7 @@ function TaskCard({ task, onUpdate, onDelete, onClick, projectColor, isOverlay }
       initial={!isOverlay ? { opacity: 0, y: 10 } : { opacity: 1, scale: 1.05, rotate: 2 }}
       animate={{ opacity: 1, y: 0, scale: isOverlay ? 1.05 : 1, rotate: isOverlay ? 2 : 0 }}
       className={cn(
-        "bg-white border rounded-3xl p-5 shadow-sm transition-all group relative overflow-hidden",
+        "bg-white border rounded-2xl p-5 shadow-sm transition-all group relative overflow-hidden",
         isOverlay ? "shadow-2xl border-indigo-500 ring-2 ring-indigo-500/20 shadow-indigo-200" : "border-slate-200 hover:shadow-md",
         isDragging && !isOverlay && "border-indigo-200"
       )}
@@ -1696,7 +1700,7 @@ function AssetsView({ project, onUpdateProject }: { project: Project, onUpdatePr
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <form onSubmit={handleAddLink} className="bg-white p-8 rounded-[32px] border border-slate-200 shadow-xl space-y-6">
+            <form onSubmit={handleAddLink} className="bg-white rounded-2xl p-8 border border-slate-200 shadow-xl space-y-6">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-lg font-black text-slate-900 tracking-tight">Add Web Resource</h3>
                   <button type="button" onClick={() => setIsAddingAsset(false)} className="text-slate-400 hover:text-slate-600">
@@ -1748,7 +1752,7 @@ function AssetsView({ project, onUpdateProject }: { project: Project, onUpdatePr
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {assets.length === 0 ? (
-          <div className="col-span-full py-24 bg-white rounded-[48px] border border-dashed border-slate-200 flex flex-col items-center justify-center text-center">
+          <div className="col-span-full py-24 bg-white rounded-2xl border border-dashed border-slate-200 flex flex-col items-center justify-center text-center">
              <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6 text-slate-200">
                <BookOpen size={40} />
              </div>
@@ -1762,7 +1766,7 @@ function AssetsView({ project, onUpdateProject }: { project: Project, onUpdatePr
               key={asset.id}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group"
+              className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group"
             >
               <div className="flex items-start justify-between mb-6">
                 <div className={cn(
@@ -1814,6 +1818,8 @@ function NotesView({ project, onUpdateProject }: { project: Project, onUpdatePro
   const [noteTitle, setNoteTitle] = useState('');
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitleValue, setEditTitleValue] = useState('');
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [isFullScreen, setIsFullScreen] = useState(false);
 
   const notes = project.notes || [];
   const activeNote = notes.find(n => n.id === activeNoteId);
@@ -1935,7 +1941,7 @@ function NotesView({ project, onUpdateProject }: { project: Project, onUpdatePro
           </AnimatePresence>
 
           {notes.length === 0 && !isAdding ? (
-            <div className="py-24 text-center bg-white rounded-[40px] border border-dashed border-slate-200">
+            <div className="py-24 text-center bg-white rounded-2xl border border-dashed border-slate-200">
               <FileText size={48} className="mx-auto mb-4 text-slate-100" />
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-300">Journal is Empty</p>
             </div>
@@ -1949,7 +1955,7 @@ function NotesView({ project, onUpdateProject }: { project: Project, onUpdatePro
                   setIsEditingTitle(false);
                 }}
                 className={cn(
-                  "p-5 rounded-[28px] cursor-pointer transition-all border group relative overflow-hidden",
+                  "p-5 rounded-2xl cursor-pointer transition-all border group relative overflow-hidden",
                   activeNoteId === note.id 
                     ? "bg-white border-indigo-100 shadow-xl ring-1 ring-indigo-50/50" 
                     : "bg-white/50 border-transparent hover:bg-white hover:border-slate-200 hover:shadow-md"
@@ -1976,9 +1982,23 @@ function NotesView({ project, onUpdateProject }: { project: Project, onUpdatePro
         </div>
       </div>
 
-      <div className="flex-1 bg-white rounded-[48px] border border-slate-100 shadow-2xl flex flex-col overflow-hidden relative border-opacity-50">
+      <div className={cn(
+        "flex-1 bg-white rounded-2xl border border-slate-100 shadow-2xl flex flex-col overflow-hidden relative border-opacity-50 transition-all duration-500 ease-in-out",
+        isFullScreen ? "fixed inset-0 z-[100] rounded-none border-none shadow-none" : "relative"
+      )}>
         {activeNote ? (
-          <div className="flex-1 flex flex-col pt-12 px-12 pb-8">
+          <div className={cn(
+            "flex-1 flex flex-col transition-all duration-500",
+            isFullScreen ? "max-w-4xl mx-auto w-full px-8 md:px-12 pt-20 pb-12" : "pt-12 px-12 pb-8"
+          )}>
+             {isFullScreen && (
+               <button 
+                 onClick={() => setIsFullScreen(false)}
+                 className="fixed top-8 right-8 p-3 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-2xl transition-all active:scale-95"
+               >
+                 <Minimize2 size={20} />
+               </button>
+             )}
              <div className="mb-8 flex items-start justify-between">
                 <div className="flex-1 max-w-2xl">
                    {isEditingTitle ? (
@@ -2013,22 +2033,59 @@ function NotesView({ project, onUpdateProject }: { project: Project, onUpdatePro
              </div>
 
              {/* Formatting Toolbar */}
-             <div className="flex items-center gap-2 mb-8 p-1.5 bg-slate-50 w-fit rounded-2xl border border-slate-100">
-                <button onClick={() => formatText('heading')} className="p-2.5 hover:bg-white hover:shadow-sm rounded-xl text-slate-500 hover:text-indigo-600 transition-all font-black"><Heading1 size={18} /></button>
-                <div className="w-px h-6 bg-slate-200 mx-1" />
-                <button onClick={() => formatText('bold')} className="p-2.5 hover:bg-white hover:shadow-sm rounded-xl text-slate-500 hover:text-indigo-600 transition-all"><Bold size={18} /></button>
-                <button onClick={() => formatText('italic')} className="p-2.5 hover:bg-white hover:shadow-sm rounded-xl text-slate-500 hover:text-indigo-600 transition-all"><Italic size={18} /></button>
-                <div className="w-px h-6 bg-slate-200 mx-1" />
-                <button onClick={() => formatText('list')} className="p-2.5 hover:bg-white hover:shadow-sm rounded-xl text-slate-500 hover:text-indigo-600 transition-all"><ListIcon size={18} /></button>
+             <div className="flex items-center justify-between mb-8">
+               <div className="flex items-center gap-2 p-1.5 bg-slate-50 w-fit rounded-2xl border border-slate-100">
+                  <button onClick={() => formatText('heading')} className="p-2.5 hover:bg-white hover:shadow-sm rounded-xl text-slate-500 hover:text-indigo-600 transition-all font-black"><Heading1 size={18} /></button>
+                  <div className="w-px h-6 bg-slate-200 mx-1" />
+                  <button onClick={() => formatText('bold')} className="p-2.5 hover:bg-white hover:shadow-sm rounded-xl text-slate-500 hover:text-indigo-600 transition-all"><Bold size={18} /></button>
+                  <button onClick={() => formatText('italic')} className="p-2.5 hover:bg-white hover:shadow-sm rounded-xl text-slate-500 hover:text-indigo-600 transition-all"><Italic size={18} /></button>
+                  <div className="w-px h-6 bg-slate-200 mx-1" />
+                  <button onClick={() => formatText('list')} className="p-2.5 hover:bg-white hover:shadow-sm rounded-xl text-slate-500 hover:text-indigo-600 transition-all"><ListIcon size={18} /></button>
+               </div>
+               
+               <div className="flex items-center gap-2">
+                 <button 
+                   onClick={() => setIsPreviewMode(!isPreviewMode)}
+                   className={cn(
+                     "px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2",
+                     isPreviewMode 
+                       ? "bg-indigo-600 text-white shadow-lg shadow-indigo-100" 
+                       : "bg-white border border-slate-200 text-slate-500 hover:bg-slate-50"
+                   )}
+                 >
+                   {isPreviewMode ? <Edit2 size={14} /> : <BookOpen size={14} />}
+                   {isPreviewMode ? 'Exit Preview' : 'Preview Mode'}
+                 </button>
+
+                 {!isPreviewMode && (
+                   <button 
+                     onClick={() => setIsFullScreen(!isFullScreen)}
+                     className="p-2.5 bg-white border border-slate-200 text-slate-500 rounded-2xl hover:bg-slate-50 transition-all"
+                     title={isFullScreen ? "Exit Full Screen" : "Full Screen Mode"}
+                   >
+                     {isFullScreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+                   </button>
+                 )}
+               </div>
              </div>
 
-             <textarea 
-               id="note-editor"
-               value={activeNote.content}
-               onChange={e => updateNoteContent(e.target.value)}
-               placeholder="Capture your thoughts, ideas, and strategies here..."
-               className="flex-1 w-full bg-transparent border-0 focus:ring-0 text-slate-600 font-medium leading-relaxed resize-none text-xl p-0 placeholder:text-slate-200 scrollbar-thin scrollbar-thumb-slate-100"
-             />
+             {isPreviewMode ? (
+               <div className="flex-1 overflow-y-auto no-scrollbar pr-4">
+                 <div className="markdown-body">
+                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                     {activeNote.content || '_No content yet. Exit preview to start writing._'}
+                   </ReactMarkdown>
+                 </div>
+               </div>
+             ) : (
+               <textarea 
+                 id="note-editor"
+                 value={activeNote.content}
+                 onChange={e => updateNoteContent(e.target.value)}
+                 placeholder="Capture your thoughts, ideas, and strategies here..."
+                 className="flex-1 w-full bg-transparent border-0 focus:ring-0 text-slate-600 font-medium leading-relaxed resize-none text-xl p-0 placeholder:text-slate-200 scrollbar-thin scrollbar-thumb-slate-100"
+               />
+             )}
              
              <div className="mt-8 pt-8 border-t border-slate-50 flex justify-between items-center">
                 <div className="flex items-center gap-2 text-[10px] font-black text-slate-300 uppercase tracking-widest">
@@ -2043,14 +2100,14 @@ function NotesView({ project, onUpdateProject }: { project: Project, onUpdatePro
           </div>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center p-20 text-center">
-             <div className="w-32 h-32 bg-slate-50 rounded-[56px] flex items-center justify-center mb-8 text-slate-200">
+             <div className="w-32 h-32 bg-slate-50 rounded-2xl flex items-center justify-center mb-8 text-slate-200">
                <FileText size={56} />
              </div>
              <h3 className="text-3xl font-black text-slate-900 tracking-tight">Select a document</h3>
              <p className="text-slate-400 max-w-sm mt-4 text-lg font-medium">Your thoughts and project details deserve a home. Select an existing note or create a fresh one.</p>
              <button 
               onClick={() => setIsAdding(true)}
-              className="mt-10 px-8 py-4 bg-indigo-600 text-white rounded-[24px] text-xs font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 active:scale-95 flex items-center gap-3"
+              className="mt-10 px-8 py-4 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 active:scale-95 flex items-center gap-3"
              >
                <Plus size={20} />
                Start Writing

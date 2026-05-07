@@ -18,7 +18,8 @@ import {
   Rocket,
   Paintbrush,
   Layout,
-  FileText
+  FileText,
+  StickyNote
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { Project } from '@/src/types';
@@ -167,6 +168,13 @@ export default function Sidebar({
             label="Calendar" 
             isActive={activeTab === 'calendar'} 
             onClick={() => setActiveTab('calendar')}
+            isExpanded={isHovered}
+          />
+          <NavItem 
+            icon={StickyNote} 
+            label="Journal" 
+            isActive={activeTab === 'notes'} 
+            onClick={() => setActiveTab('notes')}
             isExpanded={isHovered}
           />
           <NavItem 
