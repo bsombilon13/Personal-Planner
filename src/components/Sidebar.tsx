@@ -4,22 +4,37 @@ import {
   LayoutDashboard, 
   Calendar as CalendarIcon, 
   ChevronRight, 
-  Settings, 
-  Bell, 
   Search,
   PlusCircle,
   BarChart3,
-  Users
+  Briefcase,
+  Code,
+  Target,
+  Zap,
+  Smartphone,
+  Globe,
+  Sparkles,
+  Award,
+  Rocket,
+  Paintbrush,
+  Layout,
+  FileText
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
+import { Project } from '@/src/types';
 
 interface NavItemProps {
+  key?: string | number;
   icon: React.ElementType;
   label: string;
   isActive?: boolean;
   onClick: () => void;
   isExpanded: boolean;
 }
+
+const ICONS_MAP: Record<string, React.ElementType> = {
+  Briefcase, Code, Target, Zap, Smartphone, Globe, Sparkles, Award, Rocket, Paintbrush, Layout, FileText
+};
 
 const NavItem = ({ icon: Icon, label, isActive, onClick, isExpanded }: NavItemProps) => {
   return (
@@ -97,9 +112,20 @@ const CollapsibleSection = ({ title, isExpanded, children }: CollapsibleSectionP
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  activeProjectId: string | null;
+  setActiveProjectId: (id: string | null) => void;
+  projects: Project[];
+  onAddProject: () => void;
 }
 
-export default function Sidebar({ activeTab, setActiveTab, onAddEvent, onAddProject }: SidebarProps & { onAddEvent: () => void, onAddProject: () => void }) {
+export default function Sidebar({ 
+  activeTab, 
+  setActiveTab, 
+  activeProjectId, 
+  setActiveProjectId, 
+  projects,
+  onAddProject 
+}: SidebarProps) {
   const [isHovered, setIsHovered] = useState(false);
 
   return (
@@ -131,56 +157,55 @@ export default function Sidebar({ activeTab, setActiveTab, onAddEvent, onAddProj
         <CollapsibleSection title="Main" isExpanded={isHovered}>
           <NavItem 
             icon={LayoutDashboard} 
-            label="Dashboard" 
+            label="Overview" 
             isActive={activeTab === 'dashboard'} 
             onClick={() => setActiveTab('dashboard')}
             isExpanded={isHovered}
           />
           <NavItem 
             icon={CalendarIcon} 
-            label="Activities" 
+            label="Calendar" 
             isActive={activeTab === 'calendar'} 
             onClick={() => setActiveTab('calendar')}
             isExpanded={isHovered}
           />
           <NavItem 
             icon={BarChart3} 
-            label="Projects" 
-            isActive={activeTab === 'projects'} 
-            onClick={() => setActiveTab('projects')}
+            label="Management" 
+            isActive={activeTab === 'projects' && !activeProjectId} 
+            onClick={() => {
+              setActiveTab('projects');
+              setActiveProjectId(null);
+            }}
             isExpanded={isHovered}
           />
         </CollapsibleSection>
 
-        <CollapsibleSection title="Workspace" isExpanded={isHovered}>
-          {activeTab === 'projects' ? (
-            <NavItem 
-              icon={PlusCircle} 
-              label="New Project" 
-              onClick={onAddProject}
-              isExpanded={isHovered}
-            />
-          ) : (
-            <NavItem 
-              icon={PlusCircle} 
-              label="New Event" 
-              onClick={onAddEvent}
-              isExpanded={isHovered}
-            />
-          )}
+        <CollapsibleSection title="Projects" isExpanded={isHovered}>
+          {projects.map(project => {
+            const Icon = ICONS_MAP[project.icon || 'Briefcase'] || Briefcase;
+            return (
+              <NavItem 
+                key={project.id}
+                icon={Icon} 
+                label={project.name} 
+                isActive={activeTab === 'projects' && activeProjectId === project.id} 
+                onClick={() => {
+                  setActiveTab('projects');
+                  setActiveProjectId(project.id);
+                }}
+                isExpanded={isHovered}
+              />
+            );
+          })}
           <NavItem 
-            icon={Users} 
-            label="Team" 
-            onClick={() => {}}
-            isExpanded={isHovered}
-          />
-          <NavItem 
-            icon={Bell} 
-            label="Notifications" 
-            onClick={() => {}}
+            icon={PlusCircle} 
+            label="Create Project" 
+            onClick={onAddProject}
             isExpanded={isHovered}
           />
         </CollapsibleSection>
+
       </div>
 
       <div className="mt-auto border-t border-slate-800 pt-4 px-0">
@@ -190,22 +215,7 @@ export default function Sidebar({ activeTab, setActiveTab, onAddEvent, onAddProj
           onClick={() => {}}
           isExpanded={isHovered}
         />
-        <NavItem 
-          icon={Settings} 
-          label="Settings" 
-          onClick={() => {}}
-          isExpanded={isHovered}
-        />
         
-        <div className={cn("mt-4 px-4 flex items-center transition-all", !isHovered && "justify-center px-0")}>
-          <div className="w-8 h-8 rounded-full bg-slate-700 border border-slate-600 shrink-0" />
-          {isHovered && (
-             <div className="ml-3">
-                <p className="text-xs font-bold text-white">John Doe</p>
-                <p className="text-[10px] text-slate-500">Admin</p>
-             </div>
-          )}
-        </div>
       </div>
     </motion.aside>
   );

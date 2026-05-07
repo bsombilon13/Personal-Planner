@@ -83,6 +83,7 @@ const INITIAL_ACTIVITIES: Activity[] = [
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   
   // Load initial state from localStorage
   const [activities, setActivities] = useState<Activity[]>(() => {
@@ -98,10 +99,17 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>(() => {
     const stored = localStorage.getItem(STORAGE_KEYS.PROJECTS);
     return stored ? JSON.parse(stored, revivifyDates) : [
-      { id: 'p1', name: 'Brand Identity', description: 'Visual refresh for the 2026 launch.', color: '#4f46e5', createdAt: new Date() },
-      { id: 'p2', name: 'Mobile App', description: 'Rebuilding the core customer experience.', color: '#10b981', createdAt: new Date() },
+      { id: 'p1', name: 'Brand Identity', description: 'Visual refresh for the 2026 launch.', color: '#4f46e5', icon: 'Sparkles', createdAt: new Date(), category: 'Branding' },
+      { id: 'p2', name: 'Mobile App', description: 'Rebuilding the core customer experience.', color: '#10b981', icon: 'Smartphone', createdAt: new Date(), category: 'Development' },
     ];
   });
+
+  // Initialize activeProjectId if not set
+  useEffect(() => {
+    if (!activeProjectId && projects.length > 0) {
+      setActiveProjectId(projects[0].id);
+    }
+  }, [projects]);
   
   const [projectTasks, setProjectTasks] = useState<ProjectTask[]>(() => {
     const stored = localStorage.getItem(STORAGE_KEYS.TASKS);
@@ -182,12 +190,14 @@ export default function App() {
   };
 
   // Project Handlers
-  const addProject = (name: string, description: string, color?: string) => {
+  const addProject = (name: string, description: string, color?: string, icon?: string, category?: string) => {
     const newProject: Project = {
       id: Math.random().toString(36).substr(2, 9),
       name,
       description,
-      color: color || '#' + Math.floor(Math.random()*16777215).toString(16),
+      category,
+      color: color || '#4f46e5',
+      icon: icon || 'Briefcase',
       createdAt: new Date()
     };
     setProjects([...projects, newProject]);
@@ -267,7 +277,9 @@ export default function App() {
       <Sidebar 
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
-        onAddEvent={() => openAddModal()} 
+        activeProjectId={activeProjectId}
+        setActiveProjectId={setActiveProjectId}
+        projects={projects}
         onAddProject={() => setIsAddingProject(true)}
       />
       
@@ -317,6 +329,8 @@ export default function App() {
             >
               <Calendar 
                 activities={activities} 
+                projects={projects}
+                projectTasks={projectTasks}
                 categoryColors={categoryColors}
                 onAddActivity={(date, startTime) => openAddModal(date, startTime)}
                 onEditActivity={openEditModal}
@@ -326,6 +340,7 @@ export default function App() {
                 onAddCategory={(category, color) => {
                   setCategoryColors(prev => ({ ...prev, [category]: color }));
                 }}
+                onUpdateTask={updateProjectTask}
               />
             </motion.div>
           ) : activeTab === 'projects' ? (
@@ -340,6 +355,8 @@ export default function App() {
               <ProjectDashboard 
                 projects={projects}
                 tasks={projectTasks}
+                activeProjectId={activeProjectId}
+                setActiveProjectId={setActiveProjectId}
                 isAddingProject={isAddingProject}
                 setIsAddingProject={setIsAddingProject}
                 onAddProject={addProject}

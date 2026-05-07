@@ -28,9 +28,25 @@ import {
   Video,
   Paperclip,
   FileCode,
-  Globe
+  Globe,
+  Briefcase,
+  Code,
+  Zap,
+  Target,
+  Smartphone,
+  Award,
+  Sparkles,
+  Rocket,
+  Paintbrush,
+  Bold,
+  Italic,
+  List as ListIcon,
+  Heading1,
+  Heading2,
+  ExternalLink,
+  Download
 } from 'lucide-react';
-import { Project, ProjectTask, SubTask, Comment, ProjectResource, ProjectNote, ProjectFile } from '@/src/types';
+import { Project, ProjectTask, SubTask, Comment, ProjectAsset, ProjectNote, ProjectTaskStatus } from '@/src/types';
 import { cn, generateGoogleCalendarUrlForTask } from '@/src/lib/utils';
 import { format } from 'date-fns';
 import {
@@ -56,9 +72,11 @@ import { CSS } from '@dnd-kit/utilities';
 interface ProjectDashboardProps {
   projects: Project[];
   tasks: ProjectTask[];
+  activeProjectId: string | null;
+  setActiveProjectId: (id: string | null) => void;
   isAddingProject: boolean;
   setIsAddingProject: (val: boolean) => void;
-  onAddProject: (name: string, description: string, color?: string) => void;
+  onAddProject: (name: string, description: string, color?: string, icon?: string, category?: string) => void;
   onDeleteProject: (id: string) => void;
   onUpdateProject: (project: Project) => void;
   onAddTask: (task: Omit<ProjectTask, 'id' | 'subTasks' | 'comments' | 'createdAt'>) => void;
@@ -69,6 +87,8 @@ interface ProjectDashboardProps {
 export default function ProjectDashboard({ 
   projects, 
   tasks, 
+  activeProjectId,
+  setActiveProjectId,
   isAddingProject,
   setIsAddingProject,
   onAddProject, 
@@ -78,23 +98,48 @@ export default function ProjectDashboard({
   onUpdateTask,
   onDeleteTask
 }: ProjectDashboardProps) {
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(projects[0]?.id || null);
-  const [activeProjectTab, setActiveProjectTab] = useState<'dashboard' | 'resources' | 'notes' | 'files'>('dashboard');
+  const [activeProjectTab, setActiveProjectTab] = useState<'dashboard' | 'assets' | 'notes'>('dashboard');
   
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDesc, setNewProjectDesc] = useState('');
+  const [newProjectCategory, setNewProjectCategory] = useState('');
   const [selectedColor, setSelectedColor] = useState('#4f46e5');
+  const [selectedIcon, setSelectedIcon] = useState('Briefcase');
   
   const PALETTE = [
     '#6366f1', // indigo-500
     '#3b82f6', // blue-500
+    '#0ea5e9', // sky-500
+    '#10b981', // emerald-500
     '#22c55e', // green-500
-    '#ef4444', // red-500
     '#f59e0b', // amber-500
+    '#f97316', // orange-500
+    '#ef4444', // red-500
     '#ec4899', // pink-500
+    '#d946ef', // fuchsia-500
+    '#a855f7', // purple-500
     '#8b5cf6', // violet-500
-    '#06b6d4', // cyan-500
   ];
+
+  const ICONS = [
+    { name: 'Briefcase', icon: Briefcase },
+    { name: 'Code', icon: Code },
+    { name: 'Target', icon: Target },
+    { name: 'Zap', icon: Zap },
+    { name: 'Smartphone', icon: Smartphone },
+    { name: 'Globe', icon: Globe },
+    { name: 'Sparkles', icon: Sparkles },
+    { name: 'Award', icon: Award },
+    { name: 'Rocket', icon: Rocket },
+    { name: 'Paintbrush', icon: Paintbrush },
+    { name: 'Layout', icon: Layout },
+    { name: 'FileText', icon: FileText }
+  ];
+
+  const getIconComponent = (iconName: string) => {
+    const found = ICONS.find(i => i.name === iconName);
+    return found ? found.icon : Briefcase;
+  };
 
   const generateRandomColor = () => {
     const hue = Math.floor(Math.random() * 360);
@@ -102,6 +147,7 @@ export default function ProjectDashboard({
   };
   
   const [isAddingTask, setIsAddingTask] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editingTask, setEditingTask] = useState<ProjectTask | null>(null);
   const [viewingTask, setViewingTask] = useState<ProjectTask | null>(null);
 
@@ -110,9 +156,13 @@ export default function ProjectDashboard({
   const [newTaskDueDate, setNewTaskDueDate] = useState('');
   const [newTaskAssignee, setNewTaskAssignee] = useState('');
   const [newTaskProjectId, setNewTaskProjectId] = useState<string>('');
-  const [newTaskStatus, setNewTaskStatus] = useState<'todo' | 'in-progress' | 'completed'>('todo');
+  const [newTaskStatus, setNewTaskStatus] = useState<ProjectTaskStatus>('todo');
   const [sortBy, setSortBy] = useState<'dueDate' | 'priority' | 'title' | 'createdAt'>('dueDate');
   const [sortOrientation, setSortOrientation] = useState<'asc' | 'desc'>('asc');
+  
+  const [filterStatus, setFilterStatus] = useState<string[]>([]);
+  const [filterPriority, setFilterPriority] = useState<string[]>([]);
+  const [filterAssignee, setFilterAssignee] = useState<string[]>([]);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -122,8 +172,15 @@ export default function ProjectDashboard({
   );
 
   const activeProject = projects.find(p => p.id === activeProjectId);
+  
+  const assignees = Array.from(new Set(tasks.filter(t => t.projectId === activeProjectId).map(t => t.assignee).filter(Boolean))) as string[];
+  const hasUnassigned = tasks.filter(t => t.projectId === activeProjectId).some(t => !t.assignee);
+
   const projectTasks = tasks
     .filter(t => t.projectId === activeProjectId)
+    .filter(t => filterStatus.length === 0 || filterStatus.includes(t.status))
+    .filter(t => filterPriority.length === 0 || filterPriority.includes(t.priority))
+    .filter(t => filterAssignee.length === 0 || (t.assignee ? filterAssignee.includes(t.assignee) : filterAssignee.includes('unassigned')))
     .sort((a, b) => {
       let comparison = 0;
       if (sortBy === 'dueDate') {
@@ -144,20 +201,21 @@ export default function ProjectDashboard({
 
   const handleDragEnd = (event: any) => {
     const { active, over } = event;
-    if (!over) return;
+    if (!over) {
+      setActiveDragId(null);
+      return;
+    }
 
     const activeId = active.id;
     const overId = over.id;
 
     if (activeId !== overId) {
-       // Find the task
        const task = tasks.find(t => t.id === activeId);
        if (task) {
-          // If overId is a status, move to that status
-          if (['todo', 'in-progress', 'completed'].includes(overId)) {
-            onUpdateTask({ ...task, status: overId as any });
+          const statuses: ProjectTaskStatus[] = ['todo', 'in-progress', 'pending', 'under-review', 'follow-up', 'completed'];
+          if (statuses.includes(overId as ProjectTaskStatus)) {
+            onUpdateTask({ ...task, status: overId as ProjectTaskStatus });
           } else {
-            // If overId is another task, take its status
             const overTask = tasks.find(t => t.id === overId);
             if (overTask && overTask.status !== task.status) {
               onUpdateTask({ ...task, status: overTask.status });
@@ -165,17 +223,53 @@ export default function ProjectDashboard({
           }
        }
     }
+    setActiveDragId(null);
   };
+
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const handleDragStart = (event: any) => {
+    setActiveDragId(event.active.id);
+  };
+
+  const activeDraggingTask = tasks.find(t => t.id === activeDragId);
 
   const handleAddProject = (e: React.FormEvent) => {
     e.preventDefault();
     if (newProjectName.trim()) {
-      onAddProject(newProjectName, newProjectDesc, selectedColor);
-      setNewProjectName('');
-      setNewProjectDesc('');
-      setSelectedColor('#4f46e5');
-      setIsAddingProject(false);
+      if (editingProject) {
+        onUpdateProject({
+          ...editingProject,
+          name: newProjectName,
+          description: newProjectDesc,
+          category: newProjectCategory,
+          color: selectedColor,
+          icon: selectedIcon
+        });
+      } else {
+        onAddProject(newProjectName, newProjectDesc, selectedColor, selectedIcon, newProjectCategory);
+      }
+      resetProjectForm();
     }
+  };
+
+  const resetProjectForm = () => {
+    setNewProjectName('');
+    setNewProjectDesc('');
+    setNewProjectCategory('');
+    setSelectedColor('#4f46e5');
+    setSelectedIcon('Briefcase');
+    setIsAddingProject(false);
+    setEditingProject(null);
+  };
+
+  const openEditProject = (project: Project) => {
+    setEditingProject(project);
+    setNewProjectName(project.name);
+    setNewProjectDesc(project.description || '');
+    setNewProjectCategory(project.category || '');
+    setSelectedColor(project.color);
+    setSelectedIcon(project.icon || 'Briefcase');
+    setIsAddingProject(true);
   };
 
   const handleAddTask = (e: React.FormEvent) => {
@@ -281,32 +375,37 @@ export default function ProjectDashboard({
           </div>
           
           <div className="flex-1 overflow-y-auto no-scrollbar px-3 space-y-1">
-            {projects.map(project => (
-              <div 
-                key={project.id}
-                onClick={() => setActiveProjectId(project.id)}
-                className={cn(
-                  "group flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all",
-                  activeProjectId === project.id 
-                    ? "bg-indigo-50 text-indigo-700 shadow-sm" 
-                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
-                )}
-              >
-                <div className="flex items-center min-w-0">
-                  <div className="w-2 h-2 rounded-full mr-3 shrink-0" style={{ backgroundColor: project.color }} />
-                  <span className="text-sm font-bold truncate">{project.name}</span>
-                </div>
-                <button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteProject(project.id);
-                  }}
-                  className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-red-500 transition-all"
+            {projects.map(project => {
+              const IconComponent = getIconComponent(project.icon || 'Briefcase');
+              return (
+                <div 
+                  key={project.id}
+                  onClick={() => setActiveProjectId(project.id)}
+                  className={cn(
+                    "group flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all",
+                    activeProjectId === project.id 
+                      ? "bg-indigo-50 text-indigo-700 shadow-sm" 
+                      : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+                  )}
                 >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
+                  <div className="flex items-center min-w-0">
+                    <div className="w-8 h-8 rounded-lg mr-3 shrink-0 flex items-center justify-center text-white shadow-sm" style={{ backgroundColor: project.color }}>
+                      <IconComponent size={16} />
+                    </div>
+                    <span className="text-sm font-bold truncate">{project.name}</span>
+                  </div>
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteProject(project.id);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-red-500 transition-all"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -329,21 +428,38 @@ export default function ProjectDashboard({
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.1 }}
-                        className="flex items-center gap-3 mb-2"
+                        className="flex items-center gap-3 mb-4"
                       >
-                         <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider text-white" style={{ backgroundColor: activeProject.color }}>
-                           Project
-                         </span>
-                         <span className="text-xs font-medium text-slate-400">Created {format(activeProject.createdAt, 'MMM d, yyyy')}</span>
+                         <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg" style={{ backgroundColor: activeProject.color }}>
+                            {React.createElement(getIconComponent(activeProject.icon || 'Briefcase'), { size: 24, strokeWidth: 2.5 })}
+                         </div>
+                         <div>
+                            <div className="flex items-center gap-2">
+                               <span className="px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest text-white shadow-sm" style={{ backgroundColor: activeProject.color }}>
+                                 {activeProject.category || 'Standard Project'}
+                               </span>
+                               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ID: {activeProject.id}</span>
+                            </div>
+                            <span className="text-xs font-medium text-slate-400">Since {format(activeProject.createdAt, 'MMM d, yyyy')}</span>
+                         </div>
                       </motion.div>
-                      <motion.h1 
+                      <motion.div 
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.15 }}
-                        className="text-3xl font-black text-slate-900 tracking-tight"
+                        transition={{ delay: 0.12 }}
+                        className="flex items-center gap-2 mb-2"
                       >
-                        {activeProject.name}
-                      </motion.h1>
+                        <h1 className="text-3xl font-black text-slate-900 tracking-tight">
+                          {activeProject.name}
+                        </h1>
+                        <button 
+                          onClick={() => openEditProject(activeProject)}
+                          className="p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                          title="Edit Project Details"
+                        >
+                          <Edit2 size={20} />
+                        </button>
+                      </motion.div>
                       <motion.p 
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -352,13 +468,110 @@ export default function ProjectDashboard({
                       >
                         {activeProject.description}
                       </motion.p>
+
+                      {/* Task Filters */}
+                      <div className="flex flex-wrap items-center gap-6 mt-8 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
+                        <div className="flex flex-col gap-2">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1">Status</span>
+                          <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                            {['todo', 'in-progress', 'pending', 'under-review', 'follow-up', 'completed'].map(status => (
+                              <button 
+                                key={status}
+                                onClick={() => setFilterStatus(prev => prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status])}
+                                className={cn(
+                                  "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border whitespace-nowrap",
+                                  filterStatus.includes(status) 
+                                    ? "bg-indigo-600 border-indigo-600 text-white shadow-md scale-105" 
+                                    : "bg-slate-50 border-slate-100 text-slate-500 hover:bg-white hover:border-indigo-200"
+                                )}
+                              >
+                                {status.replace('-', ' ')}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="w-[1px] h-8 bg-slate-100 self-end mb-1" />
+
+                        <div className="flex flex-col gap-2">
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1">Priority</span>
+                          <div className="flex gap-1.5">
+                            {['low', 'medium', 'high'].map(priority => (
+                              <button 
+                                key={priority}
+                                onClick={() => setFilterPriority(prev => prev.includes(priority) ? prev.filter(p => p !== priority) : [...prev, priority])}
+                                className={cn(
+                                  "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border",
+                                  filterPriority.includes(priority) 
+                                    ? (priority === 'high' ? "bg-rose-600 border-rose-600 text-white shadow-md scale-105" : 
+                                       priority === 'medium' ? "bg-amber-500 border-amber-500 text-white shadow-md scale-105" : 
+                                       "bg-blue-600 border-blue-600 text-white shadow-md scale-105")
+                                    : "bg-slate-50 border-slate-100 text-slate-500 hover:bg-white hover:border-indigo-200"
+                                )}
+                              >
+                                {priority}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {(assignees.length > 0 || hasUnassigned) && (
+                          <>
+                            <div className="w-[1px] h-8 bg-slate-100 self-end mb-1" />
+                            <div className="flex flex-col gap-2 max-w-xs">
+                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1">Assignee</span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {hasUnassigned && (
+                                  <button 
+                                    onClick={() => setFilterAssignee(prev => prev.includes('unassigned') ? prev.filter(a => a !== 'unassigned') : [...prev, 'unassigned'])}
+                                    className={cn(
+                                      "px-3 py-1 rounded-lg text-[10px] font-black transition-all border",
+                                      filterAssignee.includes('unassigned') 
+                                        ? "bg-slate-800 border-slate-800 text-white shadow-md scale-105" 
+                                        : "bg-slate-50 border-slate-100 text-slate-500 hover:bg-white hover:border-indigo-200"
+                                    )}
+                                  >
+                                    Unassigned
+                                  </button>
+                                )}
+                                {assignees.map(email => (
+                                  <button 
+                                    key={email}
+                                    onClick={() => setFilterAssignee(prev => prev.includes(email) ? prev.filter(a => a !== email) : [...prev, email])}
+                                    className={cn(
+                                      "px-3 py-1 rounded-lg text-[10px] font-black truncate max-w-[120px] transition-all border",
+                                      filterAssignee.includes(email) 
+                                        ? "bg-slate-800 border-slate-800 text-white shadow-md scale-105" 
+                                        : "bg-slate-50 border-slate-100 text-slate-500 hover:bg-white hover:border-indigo-200"
+                                    )}
+                                  >
+                                    {email.split('@')[0]}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </>
+                        )}
+
+                        {(filterStatus.length > 0 || filterPriority.length > 0 || filterAssignee.length > 0) && (
+                          <button 
+                            onClick={() => {
+                              setFilterStatus([]);
+                              setFilterPriority([]);
+                              setFilterAssignee([]);
+                            }}
+                            className="ml-auto text-[10px] font-black text-rose-500 uppercase tracking-widest hover:text-rose-600 px-2 py-1 rounded-lg hover:bg-rose-50 transition-all self-end mb-1"
+                          >
+                            Clear All
+                          </button>
+                        )}
+                      </div>
                       
                       <div className="flex items-center gap-2 mt-8 border-b border-slate-100 w-fit">
                         {[
                           { id: 'dashboard', label: 'Tasks', icon: Layout },
-                          { id: 'resources', label: 'Resources', icon: BookOpen },
+                          { id: 'assets', label: 'Resources & Files', icon: BookOpen },
                           { id: 'notes', label: 'Notes', icon: FileText },
-                          { id: 'files', label: 'Files', icon: Paperclip },
                         ].map(tab => (
                           <button
                             key={tab.id}
@@ -422,12 +635,14 @@ export default function ProjectDashboard({
                         <DndContext 
                           sensors={sensors}
                           collisionDetection={closestCorners}
+                          onDragStart={handleDragStart}
                           onDragEnd={handleDragEnd}
                         >
-                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            {(['todo', 'in-progress', 'completed'] as const).map((status, index) => (
+                          <div className="flex gap-8 overflow-x-auto pb-4 no-scrollbar min-h-[500px]">
+                            {(['todo', 'in-progress', 'pending', 'under-review', 'follow-up', 'completed'] as ProjectTaskStatus[]).map((status, index) => (
                               <motion.div
                                 key={status}
+                                className="min-w-[320px] lg:flex-1"
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: 0.1 + index * 0.1 }}
@@ -444,31 +659,27 @@ export default function ProjectDashboard({
                               </motion.div>
                             ))}
                           </div>
-                          <DragOverlay dropAnimation={{
-                            sideEffects: defaultDropAnimationSideEffects({
-                              styles: {
-                                active: {
-                                  opacity: '0.4',
-                                },
-                              },
-                            }),
-                          }}>
-                            {/* Drag overlay handled by SortableContext */}
+                          <DragOverlay>
+                             {activeDraggingTask ? (
+                               <TaskCard 
+                                 task={activeDraggingTask} 
+                                 onUpdate={onUpdateTask} 
+                                 onDelete={onDeleteTask}
+                                 onClick={() => {}}
+                                 projectColor={activeProject.color}
+                                 isOverlay
+                               />
+                             ) : null}
                           </DragOverlay>
                         </DndContext>
                       </motion.div>
-                    ) : activeProjectTab === 'resources' ? (
-                      <ResourcesView 
-                        project={activeProject} 
-                        onUpdateProject={onUpdateProject} 
-                      />
-                    ) : activeProjectTab === 'notes' ? (
-                      <NotesView 
+                    ) : activeProjectTab === 'assets' ? (
+                      <AssetsView 
                         project={activeProject} 
                         onUpdateProject={onUpdateProject} 
                       />
                     ) : (
-                      <FilesView 
+                      <NotesView 
                         project={activeProject} 
                         onUpdateProject={onUpdateProject} 
                       />
@@ -510,7 +721,7 @@ export default function ProjectDashboard({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setIsAddingProject(false)}
+              onClick={resetProjectForm}
               className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
             />
             <motion.div
@@ -520,34 +731,81 @@ export default function ProjectDashboard({
               className="relative bg-white rounded-[32px] w-full max-w-md shadow-2xl overflow-hidden p-8"
             >
               <div className="flex items-center justify-between mb-8">
-                <h2 className="text-2xl font-black text-slate-900 tracking-tight">New Project</h2>
-                <button onClick={() => setIsAddingProject(false)} className="p-2 hover:bg-slate-100 rounded-2xl text-slate-400">
+                <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+                  {editingProject ? 'Edit Project' : 'New Project'}
+                </h2>
+                <button onClick={resetProjectForm} className="p-2 hover:bg-slate-100 rounded-2xl text-slate-400">
                   <X size={20} />
                 </button>
               </div>
 
               <form onSubmit={handleAddProject} className="space-y-6">
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Project Name</label>
-                  <input 
-                    autoFocus
-                    required
-                    value={newProjectName}
-                    onChange={e => setNewProjectName(e.target.value)}
-                    placeholder="e.g., Marketing Q3 Launch"
-                    className="w-full bg-slate-50 border-0 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-indigo-500 font-bold transition-all"
-                  />
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Project Name</label>
+                    <input 
+                      autoFocus
+                      required
+                      value={newProjectName}
+                      onChange={e => setNewProjectName(e.target.value)}
+                      placeholder="e.g., Marketing Q3 Launch"
+                      className="w-full bg-slate-50 border-0 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-indigo-500 font-bold transition-all"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Category / Tag</label>
+                    <input 
+                      value={newProjectCategory}
+                      onChange={e => setNewProjectCategory(e.target.value)}
+                      placeholder="e.g., Active Project"
+                      className="w-full bg-slate-50 border-0 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-indigo-500 font-bold transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Icon</label>
+                    <div className="relative group/icon">
+                      <div 
+                        className="w-[60px] h-[60px] bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 cursor-pointer border-2 border-transparent group-hover/icon:border-indigo-100 transition-all"
+                        style={{ color: selectedColor }}
+                      >
+                        {React.createElement(getIconComponent(selectedIcon), { size: 28 })}
+                      </div>
+                    </div>
+                  </div>
                 </div>
+
+                <div>
+                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Select Icon</label>
+                   <div className="grid grid-cols-6 gap-2 p-4 bg-slate-50 rounded-3xl border border-slate-100">
+                      {ICONS.map(item => (
+                        <button
+                          key={item.name}
+                          type="button"
+                          onClick={() => setSelectedIcon(item.name)}
+                          className={cn(
+                            "p-2.5 rounded-xl transition-all flex items-center justify-center",
+                            selectedIcon === item.name 
+                              ? "bg-white text-indigo-600 shadow-md ring-2 ring-indigo-500 ring-offset-2" 
+                              : "text-slate-400 hover:bg-white hover:text-slate-600 hover:shadow-sm"
+                          )}
+                        >
+                          <item.icon size={20} />
+                        </button>
+                      ))}
+                   </div>
+                </div>
+
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Description</label>
                   <textarea 
                     value={newProjectDesc}
                     onChange={e => setNewProjectDesc(e.target.value)}
-                    placeholder="What's this project about?"
-                    rows={3}
+                    placeholder="Briefly describe the mission..."
+                    rows={2}
                     className="w-full bg-slate-50 border-0 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-indigo-500 font-medium transition-all resize-none"
                   />
                 </div>
+
                 <div>
                   <div className="flex items-center justify-between mb-3 px-1">
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Color Theme</label>
@@ -556,41 +814,29 @@ export default function ProjectDashboard({
                       onClick={() => setSelectedColor(generateRandomColor())}
                       className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:text-indigo-700 transition-colors"
                     >
-                      Generate Theme
+                      Random
                     </button>
                   </div>
-                  <div className="flex flex-wrap gap-4 px-1 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className="flex flex-wrap gap-3 p-4 bg-slate-50 rounded-3xl border border-slate-100">
                     {PALETTE.map(color => (
                       <button
                         key={color}
                         type="button"
                         onClick={() => setSelectedColor(color)}
                         className={cn(
-                          "w-10 h-10 rounded-full transition-all flex items-center justify-center relative",
-                          selectedColor === color ? "ring-2 ring-offset-2 ring-slate-900 scale-110 shadow-lg" : "hover:scale-110"
+                          "w-8 h-8 rounded-full transition-all flex items-center justify-center relative",
+                          selectedColor === color ? "scale-125 shadow-lg ring-2 ring-offset-2 ring-white" : "hover:scale-110"
                         )}
                         style={{ backgroundColor: color }}
                       >
                         {selectedColor === color && (
                           <motion.div 
                             layoutId="selectedColor"
-                            className="w-2 h-2 bg-white rounded-full shadow-sm" 
+                            className="w-1.5 h-1.5 bg-white rounded-full shadow-sm" 
                           />
                         )}
                       </button>
                     ))}
-                    <div 
-                      className="w-10 h-10 rounded-full flex items-center justify-center transition-all border-2 border-dashed border-slate-200"
-                      style={{ 
-                        backgroundColor: !PALETTE.includes(selectedColor) ? selectedColor : 'transparent',
-                        borderColor: !PALETTE.includes(selectedColor) ? selectedColor : undefined
-                      }}
-                    >
-                       {!PALETTE.includes(selectedColor) && (
-                         <div className="w-2 h-2 bg-white rounded-full shadow-sm" />
-                       )}
-                       {PALETTE.includes(selectedColor) && <div className="text-slate-300">?</div>}
-                    </div>
                   </div>
                 </div>
                 <div className="pt-4">
@@ -673,6 +919,9 @@ export default function ProjectDashboard({
                     >
                       <option value="todo">To Do</option>
                       <option value="in-progress">In Progress</option>
+                      <option value="pending">Pending</option>
+                      <option value="under-review">Under Review</option>
+                      <option value="follow-up">Follow-up</option>
                       <option value="completed">Completed</option>
                     </select>
                   </div>
@@ -732,7 +981,7 @@ export default function ProjectDashboard({
 }
 
 function TaskColumn({ status, projectTasks, onUpdateTask, onDeleteTask, setViewingTask, setIsAddingTask, projectColor }: {
-  status: 'todo' | 'in-progress' | 'completed',
+  status: ProjectTaskStatus,
   projectTasks: ProjectTask[],
   onUpdateTask: (task: ProjectTask) => void,
   onDeleteTask: (id: string) => void,
@@ -745,27 +994,39 @@ function TaskColumn({ status, projectTasks, onUpdateTask, onDeleteTask, setViewi
     id: status,
   });
 
+  const getStatusColor = (s: ProjectTaskStatus) => {
+    switch (s) {
+      case 'todo': return 'bg-slate-300';
+      case 'in-progress': return 'bg-blue-400';
+      case 'pending': return 'bg-amber-400';
+      case 'under-review': return 'bg-purple-400';
+      case 'follow-up': return 'bg-rose-400';
+      case 'completed': return 'bg-emerald-500';
+      default: return 'bg-slate-300';
+    }
+  };
+
   return (
-    <div ref={setNodeRef} className="flex flex-col h-[calc(100vh-320px)]">
+    <div ref={setNodeRef} className="flex flex-col h-[calc(100vh-320px)] bg-slate-100/40 rounded-3xl p-3 border border-slate-200/60">
       <div className="flex items-center justify-between mb-4 px-2">
         <div className="flex items-center gap-2">
           <div className={cn(
-            "w-1.5 h-1.5 rounded-full",
-            status === 'todo' ? "bg-slate-300" : status === 'in-progress' ? "bg-amber-400" : "bg-emerald-500"
+            "w-2 h-2 rounded-full shadow-sm",
+            getStatusColor(status)
           )} />
-          <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">
+          <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">
             {status.replace('-', ' ')}
           </h3>
-          <span className="text-[10px] font-bold text-slate-300 bg-slate-100 px-1.5 py-0.5 rounded">
+          <span className="text-[10px] font-bold text-slate-400 bg-white border border-slate-200 px-2 py-0.5 rounded-lg">
             {projectTasks.filter(t => t.status === status).length}
           </span>
         </div>
         {status === 'todo' && (
           <button 
             onClick={() => setIsAddingTask(true)}
-            className="p-1 hover:bg-slate-200 rounded-lg transition-colors"
+            className="p-1.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all text-slate-400 hover:text-indigo-600 shadow-sm"
           >
-            <Plus size={16} className="text-slate-400" />
+            <Plus size={14} />
           </button>
         )}
       </div>
@@ -774,7 +1035,7 @@ function TaskColumn({ status, projectTasks, onUpdateTask, onDeleteTask, setViewi
         items={projectTasks.filter(t => t.status === status).map(t => t.id)}
         strategy={verticalListSortingStrategy}
       >
-        <div className="flex-1 overflow-y-auto no-scrollbar space-y-4 pb-8 pr-2">
+        <div className="flex-1 overflow-y-auto no-scrollbar space-y-4 pb-8 pr-1">
           {projectTasks
             .filter(t => t.status === status)
             .map(task => (
@@ -949,8 +1210,8 @@ function TaskDetailModal({ task, projects, onUpdate, onClose }: {
                              <Circle size={10} className="text-indigo-500 fill-indigo-500" />
                              Status
                           </h4>
-                          <div className="flex gap-2">
-                             {(['todo', 'in-progress', 'completed'] as const).map(s => (
+                          <div className="flex flex-wrap gap-2">
+                             {(['todo', 'in-progress', 'pending', 'under-review', 'follow-up', 'completed'] as const).map(s => (
                                <button 
                                  key={s}
                                  type="button"
@@ -960,7 +1221,7 @@ function TaskDetailModal({ task, projects, onUpdate, onClose }: {
                                  }}
                                  className={cn(
                                    "px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all border",
-                                   (isEditing ? editStatus === s : task.status === s) ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-400 border-slate-200 hover:border-slate-300"
+                                   (isEditing ? editStatus === s : task.status === s) ? "bg-indigo-600 text-white border-indigo-600 shadow-md" : "bg-white text-slate-400 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
                                  )}
                                >
                                  {s.replace('-', ' ')}
@@ -1166,12 +1427,13 @@ function TaskDetailModal({ task, projects, onUpdate, onClose }: {
   );
 }
 
-function TaskCard({ task, onUpdate, onDelete, onClick, projectColor }: { 
+function TaskCard({ task, onUpdate, onDelete, onClick, projectColor, isOverlay }: { 
   task: ProjectTask, 
   onUpdate: (task: ProjectTask) => void,
   onDelete: (id: string) => void,
   onClick: () => void,
   projectColor: string,
+  isOverlay?: boolean,
   key?: React.Key
 }) {
   const {
@@ -1181,13 +1443,15 @@ function TaskCard({ task, onUpdate, onDelete, onClick, projectColor }: {
     transform,
     transition,
     isDragging
-  } = useSortable({ id: task.id });
+  } = useSortable({ id: task.id, disabled: isOverlay });
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.3 : 1,
-    zIndex: isDragging ? 10 : 1,
+    transition: transition || 'transform 200ms cubic-bezier(0.2, 0, 0, 1)',
+    opacity: isDragging ? 0.4 : 1,
+    zIndex: isDragging ? 50 : (isOverlay ? 100 : 1),
+    cursor: isOverlay ? 'grabbing' : 'pointer',
+    pointerEvents: isOverlay ? 'none' : 'auto' as any,
   };
 
   const [isExpanded, setIsExpanded] = useState(false);
@@ -1210,13 +1474,19 @@ function TaskCard({ task, onUpdate, onDelete, onClick, projectColor }: {
       ref={setNodeRef}
       style={{ ...style, '--project-color': projectColor } as any}
       layout
-      whileHover={{ y: -4, scale: 1.01, borderColor: projectColor }}
-      whileTap={{ scale: 0.98 }}
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all group cursor-pointer"
-      onClick={onClick}
+      whileHover={!isOverlay ? { y: -4, scale: 1.01, borderColor: projectColor } : undefined}
+      whileTap={!isOverlay ? { scale: 0.98 } : undefined}
+      initial={!isOverlay ? { opacity: 0, y: 10 } : { opacity: 1, scale: 1.05, rotate: 2 }}
+      animate={{ opacity: 1, y: 0, scale: isOverlay ? 1.05 : 1, rotate: isOverlay ? 2 : 0 }}
+      className={cn(
+        "bg-white border rounded-3xl p-5 shadow-sm transition-all group relative overflow-hidden",
+        isOverlay ? "shadow-2xl border-indigo-500 ring-2 ring-indigo-500/20 shadow-indigo-200" : "border-slate-200 hover:shadow-md",
+        isDragging && !isOverlay && "border-indigo-200"
+      )}
+      onClick={!isOverlay ? onClick : undefined}
     >
+      <div className="absolute top-0 left-0 w-1.5 h-full" style={{ backgroundColor: projectColor }} />
+      
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1" {...attributes} {...listeners}>
           <div className="flex items-center gap-2 mb-2">
@@ -1226,33 +1496,27 @@ function TaskCard({ task, onUpdate, onDelete, onClick, projectColor }: {
             )}>
               {task.priority}
             </span>
+            {isOverlay && (
+              <span className="bg-indigo-600 text-white px-1.5 py-0.5 rounded text-[8px] font-black uppercase">Moving</span>
+            )}
           </div>
-          <h4 className="font-bold text-slate-900 leading-tight group-hover:text-indigo-600 transition-colors" style={{ color: 'inherit' }}>
-            <span className="group-hover:text-opacity-80" style={{ color: 'var(--project-color, #1e293b)' }}>{task.title}</span>
+          <h4 className="font-bold text-slate-900 leading-tight group-hover:text-indigo-600 transition-colors">
+            {task.title}
           </h4>
         </div>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-          <button 
-            onClick={(e) => {
-               e.stopPropagation();
-               const nextStatus = task.status === 'todo' ? 'in-progress' : task.status === 'in-progress' ? 'completed' : 'todo';
-               onUpdate({ ...task, status: nextStatus });
-            }}
-            className="p-2 hover:bg-slate-100 rounded-xl text-slate-400"
-            title="Move Status"
-          >
-             <ChevronRight size={16} />
-          </button>
-          <button 
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(task.id);
-            }}
-            className="p-2 hover:bg-red-50 rounded-xl text-slate-400 hover:text-red-500"
-          >
-            <Trash2 size={16} />
-          </button>
-        </div>
+        {!isOverlay && (
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all shrink-0">
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(task.id);
+              }}
+              className="p-2 hover:bg-red-50 rounded-xl text-slate-400 hover:text-red-500 transition-all"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-between mt-4">
@@ -1275,26 +1539,20 @@ function TaskCard({ task, onUpdate, onDelete, onClick, projectColor }: {
                {format(task.dueDate, 'MMM d')}
              </span>
            )}
-           {task.assignee && (
-             <div className="flex items-center gap-1.5 ml-1">
-               <div className="w-5 h-5 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 text-[8px] font-black border border-indigo-100">
-                 {task.assignee.charAt(0).toUpperCase()}
-               </div>
-               <span className="text-[10px] font-bold text-slate-500">{task.assignee.split(' ')[0]}</span>
-             </div>
-           )}
         </div>
         
-        <button 
-          onClick={(e) => {
-            e.stopPropagation();
-            setIsExpanded(!isExpanded);
-          }}
-          className="text-[10px] font-black text-indigo-600 hover:text-indigo-700 tracking-wider flex items-center gap-1 uppercase"
-        >
-          {isExpanded ? 'Collapse' : 'Sub-tasks'}
-          <ChevronDown size={12} className={cn("transition-transform", isExpanded && "rotate-180")} />
-        </button>
+        {!isOverlay && (
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsExpanded(!isExpanded);
+            }}
+            className="text-[10px] font-black text-indigo-600 hover:text-indigo-700 tracking-wider flex items-center gap-1 uppercase"
+          >
+            {isExpanded ? 'Hide' : 'Quick View'}
+            <ChevronDown size={12} className={cn("transition-transform", isExpanded && "rotate-180")} />
+          </button>
+        )}
       </div>
 
       {task.subTasks.length > 0 && (
@@ -1303,12 +1561,13 @@ function TaskCard({ task, onUpdate, onDelete, onClick, projectColor }: {
             className="bg-emerald-500 h-full"
             initial={{ width: 0 }}
             animate={{ width: `${progress}%` }}
+            transition={{ duration: 0.5 }}
           />
         </div>
       )}
 
       <AnimatePresence>
-        {isExpanded && (
+        {isExpanded && !isOverlay && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
@@ -1316,60 +1575,29 @@ function TaskCard({ task, onUpdate, onDelete, onClick, projectColor }: {
             className="overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="pt-6 mt-4 border-t border-slate-100 space-y-4">
-               <div>
-                  <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Quick Check</h5>
-                  <div className="space-y-2">
-                    {task.subTasks.map(st => (
-                      <div key={st.id} className="flex items-center justify-between group/st bg-slate-50 p-2 rounded-xl">
-                        <div className="flex items-center gap-3">
-                          <button 
-                            onClick={() => {
-                              onUpdate({
-                                ...task,
-                                subTasks: task.subTasks.map(item => item.id === st.id ? { ...item, isCompleted: !item.isCompleted } : item)
-                              })
-                            }}
-                          >
-                            {st.isCompleted ? (
-                              <CheckCircle2 size={18} className="text-emerald-500" />
-                            ) : (
-                              <Circle size={18} className="text-slate-300" />
-                            )}
-                          </button>
-                          <span className={cn("text-xs font-medium", st.isCompleted ? "text-slate-400 line-through" : "text-slate-700")}>
-                            {st.title}
-                          </span>
-                        </div>
-                        <button 
-                          onClick={() => {
-                             onUpdate({
-                               ...task,
-                               subTasks: task.subTasks.filter(item => item.id !== st.id)
-                             })
-                          }}
-                          className="opacity-0 group-hover/st:opacity-100 p-1 text-slate-400 hover:text-red-500"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-
-                  <form onSubmit={handleCreateSubTask} className="mt-3 flex gap-2">
-                    <input 
-                      value={newSubTask}
-                      onChange={e => setNewSubTask(e.target.value)}
-                      placeholder="Add sub-task..."
-                      className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:ring-2 focus:ring-indigo-500 transition-all outline-none"
-                    />
-                    <button 
-                      type="submit"
-                      className="p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 active:scale-95 transition-all"
-                    >
-                      <Plus size={16} />
-                    </button>
-                  </form>
+            <div className="pt-6 mt-4 border-t border-slate-100 space-y-4 font-medium">
+               <div className="space-y-2">
+                 {task.subTasks.map(st => (
+                   <div key={st.id} className="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
+                     <button 
+                       onClick={() => {
+                         onUpdate({
+                           ...task,
+                           subTasks: task.subTasks.map(item => item.id === st.id ? { ...item, isCompleted: !item.isCompleted } : item)
+                         })
+                       }}
+                     >
+                       {st.isCompleted ? (
+                         <CheckCircle2 size={18} className="text-emerald-500" />
+                       ) : (
+                         <Circle size={18} className="text-slate-300" />
+                       )}
+                     </button>
+                     <span className={cn("text-xs", st.isCompleted ? "text-slate-400 line-through" : "text-slate-700")}>
+                       {st.title}
+                     </span>
+                   </div>
+                 ))}
                </div>
             </div>
           </motion.div>
@@ -1380,161 +1608,198 @@ function TaskCard({ task, onUpdate, onDelete, onClick, projectColor }: {
 }
 
 // Sub-page components for Resources, Notes, and Files
-function ResourcesView({ project, onUpdateProject }: { project: Project, onUpdateProject: (p: Project) => void }) {
-  const [isAdding, setIsAdding] = useState(false);
-  const [title, setTitle] = useState('');
-  const [url, setUrl] = useState('');
-  const [type, setType] = useState<ProjectResource['type']>('link');
+// Unified Assets View (Resources + Files)
+function AssetsView({ project, onUpdateProject }: { project: Project, onUpdateProject: (p: Project) => void }) {
+  const [isAddingAsset, setIsAddingAsset] = useState(false);
+  const [assetName, setAssetName] = useState('');
+  const [assetUrl, setAssetUrl] = useState('');
+  const [assetType, setAssetType] = useState<'link' | 'file'>('link');
 
-  const resources = project.resources || [];
+  const assets = project.assets || [];
 
-  const handleAdd = (e: React.FormEvent) => {
+  const handleAddLink = (e: React.FormEvent) => {
     e.preventDefault();
-    if (title.trim() && url.trim()) {
-      const newResource: ProjectResource = {
+    if (assetName.trim() && assetUrl.trim()) {
+      const newAsset: ProjectAsset = {
         id: Math.random().toString(36).substr(2, 9),
-        title,
-        url,
-        type,
+        name: assetName,
+        url: assetUrl.startsWith('http') ? assetUrl : `https://${assetUrl}`,
+        type: 'link',
         createdAt: new Date()
       };
-      onUpdateProject({ ...project, resources: [...resources, newResource] });
-      setTitle('');
-      setUrl('');
-      setIsAdding(false);
+      onUpdateProject({ ...project, assets: [...assets, newAsset] });
+      setAssetName('');
+      setAssetUrl('');
+      setIsAddingAsset(false);
     }
   };
 
-  const deleteResource = (id: string) => {
-    onUpdateProject({ ...project, resources: resources.filter(r => r.id !== id) });
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const uploadedFiles = e.target.files;
+    if (uploadedFiles) {
+      const newAssets: ProjectAsset[] = Array.from(uploadedFiles).map(f => {
+        const file = f as File;
+        return {
+          id: Math.random().toString(36).substr(2, 9),
+          name: file.name,
+          url: '#', // In a real app, this would be a cloud URL
+          type: 'file' as const,
+          fileType: file.type,
+          size: file.size,
+          createdAt: new Date()
+        };
+      });
+      onUpdateProject({ ...project, assets: [...assets, ...newAssets] });
+    }
+  };
+
+  const deleteAsset = (id: string) => {
+    onUpdateProject({ ...project, assets: assets.filter(a => a.id !== id) });
+  };
+
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   return (
     <div className="py-8 space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-slate-900">Project Resources</h2>
-          <p className="text-xs text-slate-400 mt-1 uppercase tracking-widest font-black">Links and documentation for the team</p>
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Resources & Files</h2>
+          <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-widest font-black">Centralized project assets and documentation</p>
         </div>
-        <button 
-          onClick={() => setIsAdding(true)}
-          className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-black flex items-center gap-2 hover:bg-black transition-all shadow-lg active:scale-95"
-        >
-          <Plus size={16} />
-          Add Resource
-        </button>
+        <div className="flex gap-3">
+          <button 
+            onClick={() => { setAssetType('link'); setIsAddingAsset(true); }}
+            className="px-5 py-2.5 bg-white border border-slate-200 text-slate-900 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm active:scale-95 flex items-center gap-2"
+          >
+            <Link size={14} />
+            Add Link
+          </button>
+          <label className="px-5 py-2.5 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-lg active:scale-95 cursor-pointer shadow-indigo-100">
+            <Plus size={14} />
+            Upload File
+            <input type="file" multiple className="hidden" onChange={handleFileUpload} />
+          </label>
+        </div>
       </div>
 
       <AnimatePresence>
-        {isAdding && (
+        {isAddingAsset && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <form onSubmit={handleAdd} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-               <div className="grid grid-cols-2 gap-4">
+            <form onSubmit={handleAddLink} className="bg-white p-8 rounded-[32px] border border-slate-200 shadow-xl space-y-6">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-lg font-black text-slate-900 tracking-tight">Add Web Resource</h3>
+                  <button type="button" onClick={() => setIsAddingAsset(false)} className="text-slate-400 hover:text-slate-600">
+                    <X size={20} />
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Resource Title</label>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Resource Name</label>
                     <input 
+                      autoFocus
                       required
-                      value={title}
-                      onChange={e => setTitle(e.target.value)}
-                      placeholder="e.g., Design Guidelines"
-                      className="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all"
+                      value={assetName}
+                      onChange={e => setAssetName(e.target.value)}
+                      placeholder="e.g., Figma Design Board"
+                      className="w-full bg-slate-50 border-0 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">URL / Path</label>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">URL</label>
                     <input 
                       required
-                      value={url}
-                      onChange={e => setUrl(e.target.value)}
-                      placeholder="https://..."
-                      className="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all"
+                      value={assetUrl}
+                      onChange={e => setAssetUrl(e.target.value)}
+                      placeholder="figma.com/file/..."
+                      className="w-full bg-slate-50 border-0 rounded-2xl px-5 py-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all"
                     />
                   </div>
-               </div>
-               <div className="flex flex-wrap gap-4 items-end">
-                  <div className="flex-1">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Type</label>
-                    <div className="flex gap-2">
-                       {(['link', 'document', 'video', 'other'] as const).map(t => (
-                         <button
-                           key={t}
-                           type="button"
-                           onClick={() => setType(t)}
-                           className={cn(
-                             "px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all border",
-                             type === t ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-400 border-slate-200 hover:border-slate-300"
-                           )}
-                         >
-                           {t}
-                         </button>
-                       ))}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button 
-                      type="button"
-                      onClick={() => setIsAdding(false)}
-                      className="px-4 py-3 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all"
-                    >
-                      Cancel
-                    </button>
-                    <button 
-                      type="submit"
-                      className="px-6 py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
-                    >
-                      Save Resource
-                    </button>
-                  </div>
-               </div>
+                </div>
+                <div className="flex justify-end gap-3 pt-4">
+                  <button 
+                    type="button"
+                    onClick={() => setIsAddingAsset(false)}
+                    className="px-6 py-3 bg-slate-50 text-slate-500 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit"
+                    className="px-8 py-3 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+                  >
+                    Add Resource
+                  </button>
+                </div>
             </form>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {resources.length === 0 ? (
-          <div className="col-span-full py-20 bg-white rounded-[40px] border border-dashed border-slate-200 flex flex-col items-center justify-center text-center">
-             <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 text-slate-300">
-               <BookOpen size={32} />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {assets.length === 0 ? (
+          <div className="col-span-full py-24 bg-white rounded-[48px] border border-dashed border-slate-200 flex flex-col items-center justify-center text-center">
+             <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6 text-slate-200">
+               <BookOpen size={40} />
              </div>
-             <h3 className="text-sm font-bold text-slate-900">No resources found</h3>
-             <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">Keep all important links and documentation in one place for your team.</p>
+             <h3 className="text-xl font-bold text-slate-900">No assets in this project</h3>
+             <p className="text-slate-400 mt-2 max-w-sm mx-auto font-medium">Keep your links, documentation, and files synchronized and accessible for the entire team.</p>
           </div>
         ) : (
-          resources.map(resource => (
+          assets.map(asset => (
             <motion.div
               layout
-              key={resource.id}
+              key={asset.id}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all group"
+              className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group"
             >
-              <div className="flex items-start justify-between mb-4">
-                <div className="p-3 bg-slate-50 rounded-2xl text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-all">
-                  {resource.type === 'link' ? <Globe size={20} /> : resource.type === 'document' ? <FileText size={20} /> : resource.type === 'video' ? <Video size={20} /> : <BookOpen size={20} />}
+              <div className="flex items-start justify-between mb-6">
+                <div className={cn(
+                  "p-4 rounded-2xl transition-all",
+                  asset.type === 'link' ? "bg-indigo-50 text-indigo-600" : "bg-emerald-50 text-emerald-600"
+                )}>
+                  {asset.type === 'link' ? <Globe size={20} /> : <FileText size={20} />}
                 </div>
-                <button 
-                  onClick={() => deleteResource(resource.id)}
-                  className="p-2 hover:bg-red-50 rounded-xl text-slate-300 hover:text-red-500 transition-all"
-                >
-                  <Trash2 size={16} />
-                </button>
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                  <button 
+                    onClick={() => deleteAsset(asset.id)}
+                    className="p-2 hover:bg-red-50 rounded-xl text-slate-300 hover:text-red-500 transition-all"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               </div>
-              <h4 className="font-bold text-slate-900 truncate" title={resource.title}>{resource.title}</h4>
-              <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mt-1 mb-4">{resource.type}</p>
-              <a 
-                href={resource.url.startsWith('http') ? resource.url : `https://${resource.url}`} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors"
-              >
-                Open Resource <Link size={12} />
-              </a>
+              <h4 className="font-black text-slate-900 truncate mb-1" title={asset.name}>{asset.name}</h4>
+              <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-6">
+                {asset.type === 'file' ? `${formatFileSize(asset.size)} • ${asset.fileType?.split('/')[1] || 'File'}` : 'External Link'}
+              </p>
+              
+              <div className="flex items-center justify-between pt-4 border-t border-slate-50">
+                <a 
+                  href={asset.url} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:text-indigo-700 transition-colors"
+                >
+                  {asset.type === 'link' ? 'Open Link' : 'Open Card'} <ExternalLink size={14} />
+                </a>
+                {asset.type === 'file' && (
+                   <button className="text-slate-400 hover:text-indigo-600 transition-colors" title="Download File">
+                      <Download size={16} />
+                   </button>
+                )}
+              </div>
             </motion.div>
           ))
         )}
@@ -1547,9 +1812,19 @@ function NotesView({ project, onUpdateProject }: { project: Project, onUpdatePro
   const [activeNoteId, setActiveNoteId] = useState<string | null>(project.notes?.[0]?.id || null);
   const [isAdding, setIsAdding] = useState(false);
   const [noteTitle, setNoteTitle] = useState('');
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editTitleValue, setEditTitleValue] = useState('');
 
   const notes = project.notes || [];
   const activeNote = notes.find(n => n.id === activeNoteId);
+
+  React.useEffect(() => {
+    if (activeNoteId && !notes.find(n => n.id === activeNoteId)) {
+      setActiveNoteId(notes[0]?.id || null);
+    } else if (!activeNoteId && notes.length > 0) {
+      setActiveNoteId(notes[0].id);
+    }
+  }, [project.id]);
 
   const addNote = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1575,6 +1850,45 @@ function NotesView({ project, onUpdateProject }: { project: Project, onUpdatePro
     onUpdateProject({ ...project, notes: updatedNotes });
   };
 
+  const formatText = (command: string) => {
+    const textarea = document.getElementById('note-editor') as HTMLTextAreaElement;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = textarea.value;
+    const selectedText = text.substring(start, end);
+    
+    let replacement = '';
+    switch (command) {
+      case 'bold': replacement = `**${selectedText}**`; break;
+      case 'italic': replacement = `*${selectedText}*`; break;
+      case 'heading': replacement = `\n# ${selectedText}`; break;
+      case 'list': replacement = `\n- ${selectedText}`; break;
+      default: return;
+    }
+
+    const newText = text.substring(0, start) + replacement + text.substring(end);
+    updateNoteContent(newText);
+    
+    // Reset focus and selection
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + 2, start + 2 + selectedText.length);
+    }, 10);
+  };
+
+  const handleUpdateTitle = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (activeNote && editTitleValue.trim()) {
+      const updatedNotes = notes.map(n => 
+        n.id === activeNoteId ? { ...n, title: editTitleValue, updatedAt: new Date() } : n
+      );
+      onUpdateProject({ ...project, notes: updatedNotes });
+      setIsEditingTitle(false);
+    }
+  };
+
   const deleteNote = (id: string) => {
     const updatedNotes = notes.filter(n => n.id !== id);
     onUpdateProject({ ...project, notes: updatedNotes });
@@ -1582,213 +1896,168 @@ function NotesView({ project, onUpdateProject }: { project: Project, onUpdatePro
   };
 
   return (
-    <div className="flex h-full py-8 gap-8 overflow-hidden">
-      <div className="w-80 flex flex-col gap-6">
-        <div className="flex items-center justify-between">
-           <h2 className="text-xl font-bold text-slate-900">Project Notes</h2>
-           <button onClick={() => setIsAdding(true)} className="p-2 bg-slate-900 text-white rounded-xl hover:bg-black transition-all shadow-lg active:scale-95">
-             <Plus size={16} />
+    <div className="flex h-[calc(100vh-200px)] py-8 gap-8">
+      <div className="w-80 shrink-0 flex flex-col gap-6">
+        <div className="flex items-center justify-between px-2">
+           <h2 className="text-2xl font-black text-slate-900 tracking-tight">Project Notes</h2>
+           <button 
+            onClick={() => setIsAdding(true)} 
+            className="p-2.5 bg-slate-900 text-white rounded-2xl hover:bg-black transition-all shadow-lg active:scale-95"
+            title="Create New Note"
+           >
+             <Plus size={18} />
            </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto no-scrollbar space-y-3">
+        <div className="flex-1 overflow-y-auto no-scrollbar space-y-3 pb-8 px-2">
           <AnimatePresence>
             {isAdding && (
               <motion.form 
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
                 onSubmit={addNote} 
-                className="bg-white p-4 rounded-2xl border-2 border-indigo-500 shadow-md"
+                className="bg-white p-5 rounded-3xl border-2 border-indigo-500 shadow-xl shadow-indigo-100"
               >
                  <input 
                    autoFocus
                    value={noteTitle}
                    onChange={e => setNoteTitle(e.target.value)}
                    placeholder="Note title..."
-                   className="w-full border-0 focus:ring-0 text-sm font-bold bg-transparent mb-2"
+                   className="w-full border-0 focus:ring-0 text-sm font-black bg-transparent mb-4"
                  />
                  <div className="flex justify-end gap-2">
-                    <button type="button" onClick={() => setIsAdding(false)} className="text-[10px] font-black uppercase text-slate-400 hover:text-slate-600 px-2 py-1">Cancel</button>
-                    <button type="submit" className="text-[10px] font-black uppercase text-indigo-600 hover:text-indigo-700 px-2 py-1">Save</button>
+                    <button type="button" onClick={() => setIsAdding(false)} className="text-[10px] font-black uppercase text-slate-400 hover:text-slate-600 px-3 py-2 rounded-xl transition-colors">Cancel</button>
+                    <button type="submit" className="text-[10px] font-black uppercase text-white bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-xl shadow-lg shadow-indigo-200 transition-all">Create</button>
                  </div>
               </motion.form>
             )}
           </AnimatePresence>
 
           {notes.length === 0 && !isAdding ? (
-            <div className="py-20 text-center opacity-50">
-              <FileText size={48} className="mx-auto mb-4 text-slate-300" />
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-400">No notes found</p>
+            <div className="py-24 text-center bg-white rounded-[40px] border border-dashed border-slate-200">
+              <FileText size={48} className="mx-auto mb-4 text-slate-100" />
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-300">Journal is Empty</p>
             </div>
           ) : (
             notes.map(note => (
-              <div 
+              <motion.div 
+                layout
                 key={note.id}
-                onClick={() => setActiveNoteId(note.id)}
+                onClick={() => {
+                  setActiveNoteId(note.id);
+                  setIsEditingTitle(false);
+                }}
                 className={cn(
-                  "p-4 rounded-2xl cursor-pointer transition-all border group",
+                  "p-5 rounded-[28px] cursor-pointer transition-all border group relative overflow-hidden",
                   activeNoteId === note.id 
-                    ? "bg-white border-indigo-100 shadow-md ring-1 ring-indigo-50" 
-                    : "bg-slate-100/50 border-transparent hover:bg-white hover:border-slate-200"
+                    ? "bg-white border-indigo-100 shadow-xl ring-1 ring-indigo-50/50" 
+                    : "bg-white/50 border-transparent hover:bg-white hover:border-slate-200 hover:shadow-md"
                 )}
               >
-                 <div className="flex items-start justify-between">
-                    <h4 className={cn("text-sm font-bold truncate pr-6", activeNoteId === note.id ? "text-indigo-600" : "text-slate-900")}>
+                 {activeNoteId === note.id && (
+                   <div className="absolute top-0 left-0 w-2 h-full bg-indigo-600" />
+                 )}
+                 <div className="flex items-start justify-between mb-2">
+                    <h4 className={cn("text-sm font-black truncate pr-4", activeNoteId === note.id ? "text-indigo-600" : "text-slate-900")}>
                       {note.title}
                     </h4>
                     <button 
                       onClick={(e) => { e.stopPropagation(); deleteNote(note.id); }}
-                      className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-red-500 transition-all"
+                      className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
                     >
-                      <Trash2 size={12} />
+                      <Trash2 size={14} />
                     </button>
                  </div>
-                 <p className="text-[10px] font-bold text-slate-400 mt-2">{format(note.updatedAt, 'MMM d, h:mm a')}</p>
-              </div>
+                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{format(note.updatedAt, 'MMM d, h:mm a')}</p>
+              </motion.div>
             ))
           )}
         </div>
       </div>
 
-      <div className="flex-1 bg-white rounded-[40px] border border-slate-100 shadow-sm flex flex-col overflow-hidden">
+      <div className="flex-1 bg-white rounded-[48px] border border-slate-100 shadow-2xl flex flex-col overflow-hidden relative border-opacity-50">
         {activeNote ? (
-          <div className="flex-1 flex flex-col p-10">
-             <div className="mb-10 flex items-center justify-between">
-                <div>
-                   <h3 className="text-2xl font-black text-slate-900 tracking-tight">{activeNote.title}</h3>
-                   <div className="flex items-center gap-2 mt-2">
-                      <Clock size={12} className="text-slate-400" />
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Last updated {format(activeNote.updatedAt, 'PPPP p')}</span>
+          <div className="flex-1 flex flex-col pt-12 px-12 pb-8">
+             <div className="mb-8 flex items-start justify-between">
+                <div className="flex-1 max-w-2xl">
+                   {isEditingTitle ? (
+                     <form onSubmit={handleUpdateTitle} className="flex gap-2">
+                        <input 
+                          autoFocus
+                          value={editTitleValue}
+                          onChange={e => setEditTitleValue(e.target.value)}
+                          onBlur={() => setIsEditingTitle(false)}
+                          className="text-4xl font-black text-slate-900 tracking-tight border-0 focus:ring-0 p-0 w-full bg-transparent"
+                        />
+                     </form>
+                   ) : (
+                     <div className="flex items-center gap-4 group">
+                        <h3 className="text-4xl font-black text-slate-900 tracking-tight">{activeNote.title}</h3>
+                        <button 
+                          onClick={() => { setEditTitleValue(activeNote.title); setIsEditingTitle(true); }}
+                          className="opacity-0 group-hover:opacity-100 p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-2xl transition-all"
+                        >
+                          <Edit2 size={24} />
+                        </button>
+                     </div>
+                   )}
+                   <div className="flex items-center gap-3 mt-4">
+                      <div className="px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-600 text-[10px] font-black uppercase tracking-widest">
+                        Document
+                      </div>
+                      <div className="w-1.5 h-1.5 rounded-full bg-slate-200" />
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Last edited {format(activeNote.updatedAt, 'PPPP p')}</span>
                    </div>
                 </div>
              </div>
+
+             {/* Formatting Toolbar */}
+             <div className="flex items-center gap-2 mb-8 p-1.5 bg-slate-50 w-fit rounded-2xl border border-slate-100">
+                <button onClick={() => formatText('heading')} className="p-2.5 hover:bg-white hover:shadow-sm rounded-xl text-slate-500 hover:text-indigo-600 transition-all font-black"><Heading1 size={18} /></button>
+                <div className="w-px h-6 bg-slate-200 mx-1" />
+                <button onClick={() => formatText('bold')} className="p-2.5 hover:bg-white hover:shadow-sm rounded-xl text-slate-500 hover:text-indigo-600 transition-all"><Bold size={18} /></button>
+                <button onClick={() => formatText('italic')} className="p-2.5 hover:bg-white hover:shadow-sm rounded-xl text-slate-500 hover:text-indigo-600 transition-all"><Italic size={18} /></button>
+                <div className="w-px h-6 bg-slate-200 mx-1" />
+                <button onClick={() => formatText('list')} className="p-2.5 hover:bg-white hover:shadow-sm rounded-xl text-slate-500 hover:text-indigo-600 transition-all"><ListIcon size={18} /></button>
+             </div>
+
              <textarea 
+               id="note-editor"
                value={activeNote.content}
                onChange={e => updateNoteContent(e.target.value)}
-               placeholder="Start writing your thoughts..."
-               className="flex-1 w-full bg-transparent border-0 focus:ring-0 text-slate-700 font-medium leading-relaxed resize-none text-lg p-0"
+               placeholder="Capture your thoughts, ideas, and strategies here..."
+               className="flex-1 w-full bg-transparent border-0 focus:ring-0 text-slate-600 font-medium leading-relaxed resize-none text-xl p-0 placeholder:text-slate-200 scrollbar-thin scrollbar-thumb-slate-100"
              />
+             
+             <div className="mt-8 pt-8 border-t border-slate-50 flex justify-between items-center">
+                <div className="flex items-center gap-2 text-[10px] font-black text-slate-300 uppercase tracking-widest">
+                  <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  Synced
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">{activeNote.content.split(/\s+/).filter(Boolean).length} Words</span>
+                  <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">{activeNote.content.length} Characters</span>
+                </div>
+             </div>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center p-20 text-center opacity-50">
-             <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6">
-               <FileText size={32} className="text-slate-200" />
+          <div className="flex-1 flex flex-col items-center justify-center p-20 text-center">
+             <div className="w-32 h-32 bg-slate-50 rounded-[56px] flex items-center justify-center mb-8 text-slate-200">
+               <FileText size={56} />
              </div>
-             <h3 className="text-xl font-bold text-slate-900">Choose a Note</h3>
-             <p className="text-slate-500 max-w-xs mt-2">Select a note from the left sidebar or create a new one to begin editing.</p>
+             <h3 className="text-3xl font-black text-slate-900 tracking-tight">Select a document</h3>
+             <p className="text-slate-400 max-w-sm mt-4 text-lg font-medium">Your thoughts and project details deserve a home. Select an existing note or create a fresh one.</p>
+             <button 
+              onClick={() => setIsAdding(true)}
+              className="mt-10 px-8 py-4 bg-indigo-600 text-white rounded-[24px] text-xs font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 active:scale-95 flex items-center gap-3"
+             >
+               <Plus size={20} />
+               Start Writing
+             </button>
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function FilesView({ project, onUpdateProject }: { project: Project, onUpdateProject: (p: Project) => void }) {
-  const [isDragging, setIsDragging] = useState(false);
-  const files = project.files || [];
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const uploadedFiles = e.target.files;
-    if (uploadedFiles) {
-      const newFiles: ProjectFile[] = (Array.from(uploadedFiles) as File[]).map(f => ({
-        id: Math.random().toString(36).substr(2, 9),
-        name: f.name,
-        size: f.size,
-        type: f.type,
-        url: '#', // In a real app, this would be a cloud URL
-        createdAt: new Date()
-      }));
-      onUpdateProject({ ...project, files: [...files, ...newFiles] });
-    }
-  };
-
-  const deleteFile = (id: string) => {
-    onUpdateProject({ ...project, files: files.filter(f => f.id !== id) });
-  };
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-
-  const getFileIcon = (type: string) => {
-    if (type.includes('image')) return <File size={20} className="text-indigo-500" />;
-    if (type.includes('pdf')) return <FileText size={20} className="text-red-500" />;
-    if (type.includes('code') || type.includes('json')) return <FileCode size={20} className="text-amber-500" />;
-    return <File size={20} className="text-slate-400" />;
-  };
-
-  return (
-    <div className="py-8 space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900">Project Files</h2>
-          <p className="text-xs text-slate-400 mt-1 uppercase tracking-widest font-black">Shared documents and assets</p>
-        </div>
-        <label className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-black flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-lg active:scale-95 cursor-pointer">
-          <Plus size={16} />
-          Upload Files
-          <input type="file" multiple className="hidden" onChange={handleFileUpload} />
-        </label>
-      </div>
-
-      <div 
-        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-        onDragLeave={() => setIsDragging(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setIsDragging(false);
-          const droppedFiles = e.dataTransfer.files;
-          if (droppedFiles) {
-            const newFiles: ProjectFile[] = (Array.from(droppedFiles) as File[]).map(f => ({
-              id: Math.random().toString(36).substr(2, 9),
-              name: f.name,
-              size: f.size,
-              type: f.type,
-              url: '#',
-              createdAt: new Date()
-            }));
-            onUpdateProject({ ...project, files: [...files, ...newFiles] });
-          }
-        }}
-        className={cn(
-          "bg-white rounded-[40px] border-2 border-dashed border-slate-200 p-20 flex flex-col items-center justify-center text-center transition-all",
-          isDragging && "border-indigo-500 bg-indigo-50 shadow-md transform scale-[0.99]"
-        )}
-      >
-         <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6">
-            <Paperclip size={32} className={cn("transition-all", isDragging ? "text-indigo-600 rotate-12" : "text-slate-200")} />
-         </div>
-         <h3 className="text-xl font-bold text-slate-900">Drop files here to upload</h3>
-         <p className="text-slate-500 max-w-xs mt-2">Upload project-related documents and assets. Your team can view and download them here.</p>
-         <label className="mt-8 text-indigo-600 font-bold hover:text-indigo-700 cursor-pointer underline underline-offset-4">
-           Browse from computer
-           <input type="file" multiple className="hidden" onChange={handleFileUpload} />
-         </label>
-      </div>
-
-      {files.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {files.map(file => (
-            <div key={file.id} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all group">
-               <div className="flex items-start justify-between mb-4">
-                  <div className="p-3 bg-slate-50 rounded-2xl">
-                     {getFileIcon(file.type)}
-                  </div>
-                  <button onClick={() => deleteFile(file.id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
-                    <Trash2 size={16} />
-                  </button>
-               </div>
-               <h4 className="text-sm font-bold text-slate-900 truncate" title={file.name}>{file.name}</h4>
-               <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tighter">{formatFileSize(file.size)} • {format(file.createdAt, 'MMM d')}</p>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

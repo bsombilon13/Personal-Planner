@@ -11,7 +11,18 @@ export const isActivityOnDay = (activity: Activity, day: Date) => {
   const targetDay = startOfDay(day);
   const activityStart = startOfDay(activity.date);
 
-  if (isSameDay(activityStart, targetDay)) return true;
+  // Check if it's within the specific date range
+  if (activity.endDate) {
+    const activityEnd = startOfDay(activity.endDate);
+    if ((isSameDay(targetDay, activityStart) || isAfter(targetDay, activityStart)) && 
+        (isSameDay(targetDay, activityEnd) || isBefore(targetDay, activityEnd))) {
+      return true;
+    }
+  } else if (isSameDay(activityStart, targetDay)) {
+    return true;
+  }
+
+  // Handle recurrence
   if (!activity.recurrence || activity.recurrence.frequency === 'none') return false;
   
   if (isBefore(targetDay, activityStart)) return false;

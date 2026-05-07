@@ -36,7 +36,8 @@ export default function ActivityModal({
     description: '',
     location: '',
     frequency: 'none' as RecurrenceFrequency,
-    endDate: format(new Date(), 'yyyy-MM-dd'),
+    activityEndDate: format(new Date(), 'yyyy-MM-dd'),
+    recurrenceEndDate: format(new Date(), 'yyyy-MM-dd'),
   });
 
   const [showAddCategory, setShowAddCategory] = useState(false);
@@ -55,7 +56,10 @@ export default function ActivityModal({
         description: editingActivity.description || '',
         location: editingActivity.location || '',
         frequency: editingActivity.recurrence?.frequency || 'none',
-        endDate: editingActivity.recurrence?.endDate 
+        activityEndDate: editingActivity.endDate 
+          ? format(editingActivity.endDate, 'yyyy-MM-dd') 
+          : format(editingActivity.date, 'yyyy-MM-dd'),
+        recurrenceEndDate: editingActivity.recurrence?.endDate 
           ? format(editingActivity.recurrence.endDate, 'yyyy-MM-dd') 
           : format(new Date(), 'yyyy-MM-dd'),
       });
@@ -75,7 +79,8 @@ export default function ActivityModal({
         description: '',
         location: '',
         frequency: 'none',
-        endDate: format(validDate, 'yyyy-MM-dd'),
+        activityEndDate: format(validDate, 'yyyy-MM-dd'),
+        recurrenceEndDate: format(validDate, 'yyyy-MM-dd'),
       }));
     }
   }, [editingActivity, isOpen, defaultDate, defaultStartTime]);
@@ -95,6 +100,7 @@ export default function ActivityModal({
       title: formData.title,
       category: formData.category,
       date: new Date(formData.date),
+      endDate: new Date(formData.activityEndDate),
       startTime: formData.startTime,
       duration: formData.duration,
       description: formData.description,
@@ -102,7 +108,7 @@ export default function ActivityModal({
       status: editingActivity ? editingActivity.status : ('upcoming' as const),
       recurrence: formData.frequency !== 'none' ? {
         frequency: formData.frequency,
-        endDate: new Date(formData.endDate),
+        endDate: new Date(formData.recurrenceEndDate),
       } : undefined,
     };
 
@@ -154,19 +160,32 @@ export default function ActivityModal({
                 />
               </div>
               
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                  <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1">Date</label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1">Start Date</label>
                   <input 
                     type="date"
                     required
                     value={formData.date}
-                    onChange={e => setFormData({ ...formData, date: e.target.value })}
+                    onChange={e => setFormData({ ...formData, date: e.target.value, activityEndDate: e.target.value })}
                     className="w-full bg-slate-50 border-0 rounded-2xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 font-medium"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1">Start</label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1">End Date</label>
+                  <input 
+                    type="date"
+                    required
+                    value={formData.activityEndDate}
+                    onChange={e => setFormData({ ...formData, activityEndDate: e.target.value })}
+                    className="w-full bg-slate-50 border-0 rounded-2xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1">Start Time</label>
                   <input 
                     type="time"
                     required
@@ -180,7 +199,7 @@ export default function ActivityModal({
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1">End</label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1">End Time</label>
                   <input 
                     type="time"
                     required
@@ -193,9 +212,6 @@ export default function ActivityModal({
                     className="w-full bg-slate-50 border-0 rounded-2xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 font-medium"
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1">Duration (min)</label>
                   <input 
@@ -210,6 +226,7 @@ export default function ActivityModal({
                     className="w-full bg-slate-50 border-0 rounded-2xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 font-medium"
                   />
                 </div>
+              </div>
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1 flex justify-between items-center">
                     Category
@@ -255,7 +272,6 @@ export default function ActivityModal({
                     </div>
                   )}
                 </div>
-              </div>
 
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1">Location</label>
@@ -298,8 +314,8 @@ export default function ActivityModal({
                     <div>
                       <input 
                         type="date"
-                        value={formData.endDate}
-                        onChange={e => setFormData({ ...formData, endDate: e.target.value })}
+                        value={formData.recurrenceEndDate}
+                        onChange={e => setFormData({ ...formData, recurrenceEndDate: e.target.value })}
                         className="w-full bg-white border-0 rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 font-medium text-sm shadow-sm"
                         placeholder="End Date"
                       />
@@ -308,7 +324,7 @@ export default function ActivityModal({
                 </div>
                 {formData.frequency !== 'none' && (
                   <p className="text-[10px] text-indigo-400 font-medium px-1">
-                    This event will repeat {formData.frequency} until {format(new Date(formData.endDate), 'MMM d, yyyy')}.
+                    This event will repeat {formData.frequency} until {format(new Date(formData.recurrenceEndDate), 'MMM d, yyyy')}.
                   </p>
                 )}
               </div>

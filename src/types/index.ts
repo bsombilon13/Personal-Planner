@@ -12,6 +12,7 @@ export interface Activity {
   description?: string;
   location?: string;
   date: Date;
+  endDate?: Date;
   startTime: string; // ISO or simple time string
   duration: number; // in minutes
   category: string;
@@ -36,12 +37,14 @@ export interface Comment {
   createdAt: Date;
 }
 
+export type ProjectTaskStatus = 'todo' | 'in-progress' | 'completed' | 'pending' | 'under-review' | 'follow-up';
+
 export interface ProjectTask {
   id: string;
   projectId: string;
   title: string;
   description?: string;
-  status: 'todo' | 'in-progress' | 'completed';
+  status: ProjectTaskStatus;
   priority: 'low' | 'medium' | 'high';
   dueDate?: Date;
   assignee?: string;
@@ -50,11 +53,13 @@ export interface ProjectTask {
   comments: Comment[];
 }
 
-export interface ProjectResource {
+export interface ProjectAsset {
   id: string;
-  title: string;
+  name: string;
   url: string;
-  type: 'link' | 'document' | 'video' | 'other';
+  type: 'link' | 'file';
+  fileType?: string;
+  size?: number;
   createdAt: Date;
 }
 
@@ -79,8 +84,9 @@ export interface Project {
   name: string;
   description?: string;
   color: string;
+  icon?: string;
   createdAt: Date;
-  resources?: ProjectResource[];
+  category?: string;
+  assets?: ProjectAsset[];
   notes?: ProjectNote[];
-  files?: ProjectFile[];
 }
