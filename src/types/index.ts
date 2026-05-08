@@ -48,6 +48,7 @@ export interface ProjectTask {
   priority: 'low' | 'medium' | 'high';
   dueDate?: Date;
   assignee?: string;
+  creatorName: string;
   createdAt: Date;
   subTasks: SubTask[];
   comments: Comment[];

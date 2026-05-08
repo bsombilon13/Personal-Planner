@@ -41,7 +41,10 @@ import {
   Paintbrush,
   Bold,
   Italic,
+  Eye,
   List as ListIcon,
+  ListOrdered,
+  Quote,
   Heading1,
   Heading2,
   ExternalLink,
@@ -58,9 +61,14 @@ import { cn, generateGoogleCalendarUrlForTask } from '@/src/lib/utils';
 import { format } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Placeholder from '@tiptap/extension-placeholder';
+import TiptapLink from '@tiptap/extension-link';
 import {
   DndContext,
   closestCorners,
+  closestCenter,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -74,6 +82,7 @@ import {
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
+  rectSortingStrategy,
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -88,10 +97,12 @@ interface ProjectDashboardProps {
   onAddProject: (name: string, description: string, color?: string, icon?: string, category?: string, coverImage?: string) => void;
   onDeleteProject: (id: string) => void;
   onUpdateProject: (project: Project) => void;
-  onAddTask: (task: Omit<ProjectTask, 'id' | 'subTasks' | 'comments' | 'createdAt'>) => void;
+  onAddTask: (task: Omit<ProjectTask, 'id' | 'subTasks' | 'comments' | 'createdAt' | 'creatorName'>) => void;
   onUpdateTask: (task: ProjectTask) => void;
   onDeleteTask: (id: string) => void;
 }
+
+const TASK_STATUSES: ProjectTaskStatus[] = ['todo', 'in-progress', 'pending', 'under-review', 'follow-up', 'completed'];
 
 export default function ProjectDashboard({ 
   projects, 
@@ -107,7 +118,7 @@ export default function ProjectDashboard({
   onUpdateTask,
   onDeleteTask
 }: ProjectDashboardProps) {
-  const [activeProjectTab, setActiveProjectTab] = useState<'dashboard' | 'assets' | 'notes'>('dashboard');
+  const [activeProjectTab, setActiveProjectTab] = useState<'dashboard' | 'assets' | 'notes' | 'settings'>('dashboard');
   
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDesc, setNewProjectDesc] = useState('');
@@ -163,7 +174,7 @@ export default function ProjectDashboard({
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const [newTaskDueDate, setNewTaskDueDate] = useState('');
-  const [newTaskAssignee, setNewTaskAssignee] = useState('');
+  const [newTaskAssignee, setNewTaskAssignee] = useState('Bryan Sombilon');
   const [newTaskProjectId, setNewTaskProjectId] = useState<string>('');
   const [newTaskStatus, setNewTaskStatus] = useState<ProjectTaskStatus>('todo');
   
@@ -184,7 +195,11 @@ export default function ProjectDashboard({
   const [filterAssignee, setFilterAssignee] = useState<string[]>([]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
@@ -274,31 +289,61 @@ export default function ProjectDashboard({
     }
   };
 
-  const handleDragEnd = (event: any) => {
+  const handleDragOver = (event: any) => {
     const { active, over } = event;
-    if (!over) {
-      setActiveDragId(null);
-      return;
-    }
+    if (!over) return;
 
     const activeId = active.id;
     const overId = over.id;
 
     if (activeId !== overId) {
-       const task = tasks.find(t => t.id === activeId);
-       if (task) {
-          const statuses: ProjectTaskStatus[] = ['todo', 'in-progress', 'pending', 'under-review', 'follow-up', 'completed'];
-          if (statuses.includes(overId as ProjectTaskStatus)) {
-            onUpdateTask({ ...task, status: overId as ProjectTaskStatus });
-          } else {
-            const overTask = tasks.find(t => t.id === overId);
-            if (overTask && overTask.status !== task.status) {
-              onUpdateTask({ ...task, status: overTask.status });
-            }
-          }
-       }
+      const task = tasks.find(t => t.id === activeId);
+      if (!task) return;
+
+      // Find if we are over a column (id is in TASK_STATUSES)
+      // or over an item in a column (id is not in TASK_STATUSES, we need its status)
+      let overStatus: ProjectTaskStatus | undefined;
+      
+      if (TASK_STATUSES.includes(overId as ProjectTaskStatus)) {
+        overStatus = overId as ProjectTaskStatus;
+      } else {
+        const overTask = tasks.find(t => t.id === overId);
+        if (overTask) {
+          overStatus = overTask.status;
+        }
+      }
+
+      if (overStatus && task.status !== overStatus) {
+        onUpdateTask({ ...task, status: overStatus });
+      }
     }
+  };
+
+  const handleDragEnd = (event: any) => {
+    const { active, over } = event;
     setActiveDragId(null);
+    if (!over) return;
+
+    const activeId = active.id;
+    const overId = over.id;
+
+    const task = tasks.find(t => t.id === activeId);
+    if (!task) return;
+
+    let overStatus: ProjectTaskStatus | undefined;
+    
+    if (TASK_STATUSES.includes(overId as ProjectTaskStatus)) {
+      overStatus = overId as ProjectTaskStatus;
+    } else {
+      const overTask = tasks.find(t => t.id === overId);
+      if (overTask) {
+        overStatus = overTask.status;
+      }
+    }
+
+    if (overStatus && task.status !== overStatus) {
+      onUpdateTask({ ...task, status: overStatus });
+    }
   };
 
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
@@ -365,7 +410,7 @@ export default function ProjectDashboard({
       });
       setNewTaskTitle('');
       setNewTaskDueDate('');
-      setNewTaskAssignee('');
+      setNewTaskAssignee('Bryan Sombilon');
       setNewTaskPriority('medium');
       setNewTaskStatus('todo');
       setIsAddingTask(false);
@@ -504,49 +549,72 @@ export default function ProjectDashboard({
                 transition={{ duration: 0.3, ease: "easeOut" }}
                 className="flex-1 flex flex-col overflow-hidden"
               >
-                <div className="p-8 pb-4">
-                  <div className="flex items-end justify-between mb-8">
-                    <div>
+                {/* Hero Section */}
+                <div className="relative h-64 shrink-0 overflow-hidden">
+                  {activeProject.coverImage ? (
+                    <>
+                      <img 
+                        src={activeProject.coverImage} 
+                        className="w-full h-full object-cover" 
+                        alt={activeProject.name}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/40 to-transparent" />
+                    </>
+                  ) : (
+                    <div 
+                      className="w-full h-full"
+                      style={{ 
+                        background: `linear-gradient(135deg, ${activeProject.color} 0%, ${activeProject.color}dd 100%)`,
+                        backgroundImage: `radial-gradient(circle at 20% 30%, ${activeProject.color}22 0%, transparent 50%), radial-gradient(circle at 80% 70%, #ffffff11 0%, transparent 50%)`
+                      }}
+                    >
+                      <div className="absolute inset-0 bg-slate-900/20" />
+                    </div>
+                  )}
+                  
+                  <div className="absolute bottom-0 left-0 right-0 p-8 flex items-end justify-between">
+                    <div className="flex items-center gap-6">
                       <motion.div 
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.1 }}
-                        className="flex items-center gap-3 mb-4"
+                        initial={{ scale: 0.8, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        className="w-20 h-20 rounded-3xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-2xl overflow-hidden"
                       >
-                         <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg overflow-hidden" style={{ backgroundColor: activeProject.color }}>
-                            {activeProject.coverImage ? (
-                               <img src={activeProject.coverImage} className="w-full h-full object-cover" />
-                            ) : (
-                               React.createElement(getIconComponent(activeProject.icon || 'Briefcase'), { size: 24, strokeWidth: 2.5 })
-                            )}
-                         </div>
-                         <div>
-                            <div className="flex items-center gap-2">
-                               <span className="px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest text-white shadow-sm" style={{ backgroundColor: activeProject.color }}>
-                                 {activeProject.category || 'Standard Project'}
-                               </span>
-                               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ID: {activeProject.id}</span>
-                            </div>
-                            <span className="text-xs font-medium text-slate-400">Since {format(activeProject.createdAt, 'MMM d, yyyy')}</span>
-                         </div>
+                        {activeProject.coverImage ? (
+                           <div className="w-full h-full bg-cover bg-center" style={{ backgroundImage: `url(${activeProject.coverImage})` }} />
+                        ) : (
+                           React.createElement(getIconComponent(activeProject.icon || 'Briefcase'), { size: 32, strokeWidth: 2.5 })
+                        )}
                       </motion.div>
-                      <motion.div 
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.12 }}
-                        className="flex items-center gap-2 mb-2"
-                      >
-                        <h1 className="text-3xl font-black text-slate-900 tracking-tight">
+                      
+                      <div>
+                        <div className="flex items-center gap-3 mb-2">
+                           <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-white/20 backdrop-blur-md text-white border border-white/20">
+                             {activeProject.category || 'Standard Project'}
+                           </span>
+                           <div className="w-1.5 h-1.5 rounded-full bg-white/30" />
+                           <span className="text-[10px] font-bold text-white/60 uppercase tracking-widest">Since {format(activeProject.createdAt, 'MMM yyyy')}</span>
+                        </div>
+                        <h1 className="text-4xl font-black text-white tracking-tight drop-shadow-sm">
                           {activeProject.name}
                         </h1>
-                        <button 
-                          onClick={() => openEditProject(activeProject)}
-                          className="p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
-                          title="Edit Project Details"
-                        >
-                          <Edit2 size={20} />
-                        </button>
-                      </motion.div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <button 
+                        onClick={() => openEditProject(activeProject)}
+                        className="p-3 bg-white/10 backdrop-blur-md hover:bg-white/20 text-white rounded-2xl transition-all border border-white/10"
+                        title="Edit Project"
+                      >
+                        <Edit2 size={20} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="px-8 pb-4">
+                  <div className="flex items-end justify-between mb-8">
+                    <div>
                       <motion.p 
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -555,162 +623,119 @@ export default function ProjectDashboard({
                       >
                         {activeProject.description}
                       </motion.p>
-
-                      {/* Task Filters */}
-                      <div className="flex flex-wrap items-center gap-6 mt-8 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
-                        <div className="flex flex-col gap-2">
-                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1">Status</span>
-                          <div className="flex items-center gap-1.5 flex-wrap pb-1">
-                            {['todo', 'in-progress', 'pending', 'under-review', 'follow-up', 'completed'].map(status => (
-                              <button 
-                                key={status}
-                                onClick={() => setFilterStatus(prev => prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status])}
-                                className={cn(
-                                  "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border whitespace-nowrap",
-                                  filterStatus.includes(status) 
-                                    ? "bg-indigo-600 border-indigo-600 text-white shadow-md scale-105" 
-                                    : "bg-slate-50 border-slate-100 text-slate-500 hover:bg-white hover:border-indigo-200"
-                                )}
-                              >
-                                {status.replace('-', ' ')}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="w-[1px] h-8 bg-slate-100 self-end mb-1" />
-
-                        <div className="flex flex-col gap-2">
-                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1">Priority</span>
-                          <div className="flex gap-1.5">
-                            {['low', 'medium', 'high'].map(priority => (
-                              <button 
-                                key={priority}
-                                onClick={() => setFilterPriority(prev => prev.includes(priority) ? prev.filter(p => p !== priority) : [...prev, priority])}
-                                className={cn(
-                                  "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all border",
-                                  filterPriority.includes(priority) 
-                                    ? (priority === 'high' ? "bg-rose-600 border-rose-600 text-white shadow-md scale-105" : 
-                                       priority === 'medium' ? "bg-amber-500 border-amber-500 text-white shadow-md scale-105" : 
-                                       "bg-blue-600 border-blue-600 text-white shadow-md scale-105")
-                                    : "bg-slate-50 border-slate-100 text-slate-500 hover:bg-white hover:border-indigo-200"
-                                )}
-                              >
-                                {priority}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {(assignees.length > 0 || hasUnassigned) && (
-                          <>
-                            <div className="w-[1px] h-8 bg-slate-100 self-end mb-1" />
-                            <div className="flex flex-col gap-2 max-w-xs">
-                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1">Assignee</span>
-                              <div className="flex flex-wrap gap-1.5">
-                                {hasUnassigned && (
-                                  <button 
-                                    onClick={() => setFilterAssignee(prev => prev.includes('unassigned') ? prev.filter(a => a !== 'unassigned') : [...prev, 'unassigned'])}
-                                    className={cn(
-                                      "px-3 py-1 rounded-lg text-[10px] font-black transition-all border",
-                                      filterAssignee.includes('unassigned') 
-                                        ? "bg-slate-800 border-slate-800 text-white shadow-md scale-105" 
-                                        : "bg-slate-50 border-slate-100 text-slate-500 hover:bg-white hover:border-indigo-200"
-                                    )}
-                                  >
-                                    Unassigned
-                                  </button>
-                                )}
-                                {assignees.map(email => (
-                                  <button 
-                                    key={email}
-                                    onClick={() => setFilterAssignee(prev => prev.includes(email) ? prev.filter(a => a !== email) : [...prev, email])}
-                                    className={cn(
-                                      "px-3 py-1 rounded-lg text-[10px] font-black truncate max-w-[120px] transition-all border",
-                                      filterAssignee.includes(email) 
-                                        ? "bg-slate-800 border-slate-800 text-white shadow-md scale-105" 
-                                        : "bg-slate-50 border-slate-100 text-slate-500 hover:bg-white hover:border-indigo-200"
-                                    )}
-                                  >
-                                    {email.split('@')[0]}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          </>
-                        )}
-
-                        {(filterStatus.length > 0 || filterPriority.length > 0 || filterAssignee.length > 0) && (
-                          <button 
-                            onClick={() => {
-                              setFilterStatus([]);
-                              setFilterPriority([]);
-                              setFilterAssignee([]);
-                            }}
-                            className="ml-auto text-[10px] font-black text-rose-500 uppercase tracking-widest hover:text-rose-600 px-2 py-1 rounded-lg hover:bg-rose-50 transition-all self-end mb-1"
-                          >
-                            Clear All
-                          </button>
-                        )}
-                      </div>
-                      
-                      <div className="flex items-center gap-2 mt-8 border-b border-slate-100 w-fit">
-                        {[
-                          { id: 'dashboard', label: 'Tasks', icon: Layout },
-                          { id: 'assets', label: 'Resources & Files', icon: BookOpen },
-                          { id: 'notes', label: 'Notes', icon: FileText },
-                        ].map(tab => (
-                          <button
-                            key={tab.id}
-                            onClick={() => setActiveProjectTab(tab.id as any)}
-                            className={cn(
-                              "flex items-center gap-2 px-6 py-3 text-xs font-black uppercase tracking-widest transition-all relative overflow-hidden",
-                              activeProjectTab === tab.id ? "text-indigo-600" : "text-slate-400 hover:text-slate-600"
-                            )}
-                          >
-                            <tab.icon size={14} />
-                            {tab.label}
-                            {activeProjectTab === tab.id && (
-                              <motion.div 
-                                layoutId="activeTabUnderline"
-                                className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600" 
-                              />
-                            )}
-                          </button>
-                        ))}
-                      </div>
                     </div>
-                    
-                    <motion.div 
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: 0.25 }}
-                      className="flex gap-4"
-                    >
-                      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm min-w-[140px]">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Progress</p>
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-2xl font-black text-slate-900">
-                             {projectTasks.length > 0 
-                               ? Math.round((projectTasks.filter(t => t.status === 'completed').length / projectTasks.length) * 100) 
-                               : 0}%
-                          </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-2">
+                    {[
+                      { 
+                        label: 'Tasks Completion', 
+                        value: `${projectTasks.length > 0 ? Math.round((projectTasks.filter(t => t.status === 'completed').length / projectTasks.length) * 100) : 0}%`,
+                        sub: `${projectTasks.filter(t => t.status === 'completed').length}/${projectTasks.length} Done`,
+                        color: activeProject.color,
+                        progress: projectTasks.length > 0 ? (projectTasks.filter(t => t.status === 'completed').length / projectTasks.length) * 100 : 0
+                      },
+                      { 
+                        label: 'Active Tasks', 
+                        value: projectTasks.filter(t => t.status !== 'completed').length,
+                        sub: `${projectTasks.filter(t => t.priority === 'high').length} High Priority`,
+                        color: '#f59e0b'
+                      },
+                      { 
+                        label: 'Upcoming Deadlines', 
+                        value: projectTasks.filter(t => t.dueDate && t.dueDate > new Date() && t.status !== 'completed').length,
+                        sub: 'Next 7 days',
+                        color: '#ef4444'
+                      },
+                      { 
+                        label: 'Contributors', 
+                        value: assignees.length || 1,
+                        sub: 'Shared across team',
+                        color: '#6366f1'
+                      }
+                    ].map((stat, i) => (
+                      <motion.div 
+                        initial={{ y: 20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ delay: 0.1 + (i * 0.05) }}
+                        key={stat.label}
+                        className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xl shadow-slate-200/50"
+                      >
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{stat.label}</p>
+                        <div className="flex items-baseline justify-between">
+                          <span className="text-2xl font-black text-slate-900">{stat.value}</span>
+                          {stat.progress !== undefined && (
+                             <div className="w-12 h-12 relative flex items-center justify-center">
+                               <svg className="w-full h-full -rotate-90">
+                                 <circle 
+                                   cx="24" cy="24" r="20" 
+                                   fill="none" stroke="currentColor" 
+                                   strokeWidth="4" 
+                                   className="text-slate-100"
+                                 />
+                                 <motion.circle 
+                                   cx="24" cy="24" r="20" 
+                                   fill="none" stroke="currentColor" 
+                                   strokeWidth="4" 
+                                   strokeDasharray="125.6"
+                                   initial={{ strokeDashoffset: 125.6 }}
+                                   animate={{ strokeDashoffset: 125.6 - (125.6 * stat.progress) / 100 }}
+                                   transition={{ duration: 1, ease: "easeOut" }}
+                                   className="text-indigo-600"
+                                   strokeLinecap="round"
+                                 />
+                               </svg>
+                             </div>
+                          )}
                         </div>
-                        <div className="w-full bg-slate-100 h-1.5 rounded-full mt-3 overflow-hidden">
+                        <p className="text-[10px] font-bold text-slate-400 mt-1">{stat.sub}</p>
+                      </motion.div>
+                    ))}
+                  </div>
+
+                  {/* Tab Navigation */}
+                  <div className="flex items-center gap-2 mt-8 border-b border-slate-100">
+                    {[
+                      { id: 'dashboard', label: 'Tasks Dashboard', icon: Layout },
+                      { id: 'assets', label: 'Knowledge Base', icon: BookOpen },
+                      { id: 'notes', label: 'Project Journal', icon: FileText },
+                      { id: 'settings', label: 'Settings', icon: Edit2 },
+                    ].map(tab => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveProjectTab(tab.id as any)}
+                        className={cn(
+                          "flex items-center gap-2 px-6 py-4 text-xs font-black uppercase tracking-widest transition-all relative",
+                          activeProjectTab === tab.id ? "text-indigo-600" : "text-slate-400 hover:text-slate-600"
+                        )}
+                      >
+                        <tab.icon size={14} />
+                        {tab.label}
+                        {activeProjectTab === tab.id && (
                           <motion.div 
-                            className="h-full rounded-full"
-                            style={{ backgroundColor: activeProject.color }}
-                            initial={{ width: 0 }}
-                            animate={{ width: `${projectTasks.length > 0 ? (projectTasks.filter(t => t.status === 'completed').length / projectTasks.length) * 100 : 0}%` }}
-                            transition={{ duration: 0.8, ease: "circOut" }}
+                            layoutId="activeTabUnderline"
+                            className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-600 rounded-t-full" 
                           />
-                        </div>
-                      </div>
-                    </motion.div>
+                        )}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-8 no-scrollbar">
+                <div className="flex-1 overflow-y-auto px-8 py-6 no-scrollbar">
+                  <div className="mb-6 flex items-center justify-between">
+                    <div>
+                      <h2 className="text-xl font-black text-slate-900 tracking-tight">
+                        {activeProjectTab === 'dashboard' ? 'Workflow' : activeProjectTab === 'assets' ? 'Resources' : activeProjectTab === 'notes' ? 'Notebook' : 'Configuration'}
+                      </h2>
+                      <p className="text-xs font-medium text-slate-400 mt-1">
+                        {activeProjectTab === 'dashboard' ? 'Manage your project tasks and workflow progress' : 
+                         activeProjectTab === 'assets' ? 'Central repository for all project assets and documentation' : 
+                         activeProjectTab === 'notes' ? 'Space for deep work and project documentation' :
+                         'Manage project configuration and presence'}
+                      </p>
+                    </div>
+                  </div>
                   <AnimatePresence mode="wait">
                     {activeProjectTab === 'dashboard' ? (
                       <motion.div
@@ -721,15 +746,16 @@ export default function ProjectDashboard({
                       >
                         <DndContext 
                           sensors={sensors}
-                          collisionDetection={closestCorners}
+                          collisionDetection={closestCenter}
                           onDragStart={handleDragStart}
+                          onDragOver={handleDragOver}
                           onDragEnd={handleDragEnd}
                         >
-                          <div className="flex gap-8 overflow-x-auto pb-4 no-scrollbar min-h-[500px]">
-                            {(['todo', 'in-progress', 'pending', 'under-review', 'follow-up', 'completed'] as ProjectTaskStatus[]).map((status, index) => (
+                          <div className="flex flex-col gap-6 pb-10">
+                            {TASK_STATUSES.map((status, index) => (
                               <motion.div
                                 key={status}
-                                className="min-w-[260px] lg:flex-1"
+                                className="w-full h-full min-h-[120px]"
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: 0.1 + index * 0.1 }}
@@ -765,10 +791,17 @@ export default function ProjectDashboard({
                         project={activeProject} 
                         onUpdateProject={onUpdateProject} 
                       />
-                    ) : (
+                    ) : activeProjectTab === 'notes' ? (
                       <NotesView 
                         project={activeProject} 
                         onUpdateProject={onUpdateProject} 
+                      />
+                    ) : (
+                      <SettingsView 
+                        project={activeProject}
+                        onUpdateProject={onUpdateProject}
+                        onDeleteProject={onDeleteProject}
+                        setActiveProjectId={setActiveProjectId}
                       />
                     )}
                   </AnimatePresence>
@@ -777,23 +810,37 @@ export default function ProjectDashboard({
           ) : (
             <motion.div 
               key="no-project"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.02 }}
+              className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50 relative overflow-hidden"
             >
-               <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-6">
-                 <Layout size={32} className="text-slate-300" />
-               </div>
-               <h2 className="text-xl font-bold text-slate-900 mb-2">No Active Project</h2>
-               <p className="text-slate-500 max-w-sm text-center mb-8">Select a project from the sidebar or create a new one to start managing your tasks.</p>
-               <button 
-                onClick={() => setIsAddingProject(true)}
-                className="px-6 py-3 bg-white border border-slate-200 text-slate-900 rounded-2xl text-sm font-black hover:bg-slate-50 transition-all shadow-sm active:scale-95 flex items-center gap-2"
-               >
-                 <Plus size={18} />
-                 Create Project
-               </button>
+              {/* Decorative background elements */}
+              <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-100/30 rounded-full blur-3xl -mr-48 -mt-48" />
+              <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-100/20 rounded-full blur-3xl -ml-48 -mb-48" />
+              
+              <div className="relative flex flex-col items-center text-center">
+                 <div className="w-24 h-24 bg-white rounded-[2rem] flex items-center justify-center mb-8 shadow-2xl rotate-6 border border-slate-100 group hover:rotate-0 transition-transform duration-500">
+                   <Layout size={40} className="text-indigo-400 group-hover:scale-110 transition-transform" />
+                 </div>
+                 <h2 className="text-3xl font-black text-slate-900 mb-4 tracking-tight">Focus your momentum</h2>
+                 <p className="text-slate-500 max-w-sm text-lg font-medium leading-relaxed mb-10">Select a project journey from the sidebar to begin, or create a brand new mission workspace.</p>
+                 
+                 <div className="flex items-center gap-4">
+                   <button 
+                    onClick={() => setIsAddingProject(true)}
+                    className="px-10 py-5 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-900 transition-all shadow-xl shadow-indigo-100 active:scale-95 flex items-center gap-2"
+                   >
+                     <Plus size={20} />
+                     Initialize Project
+                   </button>
+                   
+                   <div className="px-6 py-5 bg-white border border-slate-200 text-slate-400 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 select-none opacity-50">
+                      <ArrowUp size={16} />
+                      Select from Sidebar
+                   </div>
+                 </div>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -1181,7 +1228,7 @@ function TaskColumn({ status, projectTasks, onUpdateTask, onDeleteTask, setViewi
   projectColor: string,
   key?: React.Key
 }) {
-  const { setNodeRef } = useDroppable({
+  const { setNodeRef, isOver } = useDroppable({
     id: status,
   });
 
@@ -1198,24 +1245,30 @@ function TaskColumn({ status, projectTasks, onUpdateTask, onDeleteTask, setViewi
   };
 
   return (
-    <div ref={setNodeRef} className="flex flex-col h-[calc(100vh-320px)] bg-slate-100/40 rounded-2xl p-3 border border-slate-200/60">
-      <div className="flex items-center justify-between mb-4 px-2">
-        <div className="flex items-center gap-2">
+    <div 
+      ref={setNodeRef} 
+      className={cn(
+        "flex flex-col bg-slate-100/30 rounded-3xl p-6 border transition-all duration-200 relative group/column",
+        isOver ? "bg-white border-indigo-400 shadow-xl shadow-indigo-100/50 scale-[1.01] ring-4 ring-indigo-50" : "border-slate-200/40"
+      )}
+    >
+      <div className="flex items-center justify-between mb-5 sticky top-0 bg-transparent z-10">
+        <div className="flex items-center gap-3">
           <div className={cn(
-            "w-2 h-2 rounded-full shadow-sm",
+            "w-3 h-3 rounded-full shadow-inner",
             getStatusColor(status)
           )} />
-          <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">
+          <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">
             {status.replace('-', ' ')}
           </h3>
-          <span className="text-[10px] font-bold text-slate-400 bg-white border border-slate-200 px-2 py-0.5 rounded-lg">
+          <span className="text-[10px] font-black text-white px-2 py-0.5 rounded-full" style={{ backgroundColor: getStatusColor(status).replace('bg-', '') === 'slate-300' ? '#94a3b8' : '' }}>
             {projectTasks.filter(t => t.status === status).length}
           </span>
         </div>
         {status === 'todo' && (
           <button 
             onClick={() => setIsAddingTask(true)}
-            className="p-1.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all text-slate-400 hover:text-indigo-600 shadow-sm"
+            className="p-1.5 bg-white border border-slate-200 rounded-xl hover:bg-indigo-600 hover:text-white transition-all text-slate-400 shadow-sm active:scale-95"
           >
             <Plus size={14} />
           </button>
@@ -1224,9 +1277,9 @@ function TaskColumn({ status, projectTasks, onUpdateTask, onDeleteTask, setViewi
 
       <SortableContext 
         items={projectTasks.filter(t => t.status === status).map(t => t.id)}
-        strategy={verticalListSortingStrategy}
+        strategy={rectSortingStrategy}
       >
-        <div className="flex-1 overflow-y-auto no-scrollbar space-y-4 pb-8 pr-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-4">
           {projectTasks
             .filter(t => t.status === status)
             .map(task => (
@@ -1240,6 +1293,11 @@ function TaskColumn({ status, projectTasks, onUpdateTask, onDeleteTask, setViewi
               />
             ))
           }
+          {projectTasks.filter(t => t.status === status).length === 0 && (
+             <div className="col-span-full h-24 border-2 border-dashed border-slate-200 rounded-2xl flex items-center justify-center">
+                <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Drop here</span>
+             </div>
+          )}
         </div>
       </SortableContext>
     </div>
@@ -1267,7 +1325,7 @@ function TaskDetailModal({ task, projects, onUpdate, onClose }: {
     if (commentText.trim()) {
       const newComment: Comment = {
         id: Math.random().toString(36).substr(2, 9),
-        authorName: 'John Doe',
+        authorName: 'Bryan Sombilon',
         text: commentText,
         createdAt: new Date()
       };
@@ -1559,6 +1617,15 @@ function TaskDetailModal({ task, projects, onUpdate, onClose }: {
                         {format(task.createdAt, 'MMM d, yyyy')}
                       </span>
                    </div>
+                   <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Zap size={14} className="text-slate-400" />
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Creator</span>
+                      </div>
+                      <span className="text-xs font-bold text-slate-700">
+                        {task.creatorName}
+                      </span>
+                   </div>
                    <div className="pt-4 border-t border-slate-50">
                       <a 
                         href={generateGoogleCalendarUrlForTask(task)}
@@ -1667,137 +1734,107 @@ function TaskCard({ task, onUpdate, onDelete, onClick, projectColor, isOverlay }
   return (
     <motion.div 
       ref={setNodeRef}
-      style={{ ...style, '--project-color': projectColor } as any}
+      style={{ ...style, '--project-color': projectColor, touchAction: 'none' } as any}
       layout
       whileHover={!isOverlay ? { y: -4, scale: 1.01, borderColor: projectColor } : undefined}
       whileTap={!isOverlay ? { scale: 0.98 } : undefined}
       initial={!isOverlay ? { opacity: 0, y: 10 } : { opacity: 1, scale: 1.05, rotate: 2 }}
       animate={{ opacity: 1, y: 0, scale: isOverlay ? 1.05 : 1, rotate: isOverlay ? 2 : 0 }}
       className={cn(
-        "bg-white border rounded-2xl p-5 shadow-sm transition-all group relative overflow-hidden",
-        isOverlay ? "shadow-2xl border-indigo-500 ring-2 ring-indigo-500/20 shadow-indigo-200" : "border-slate-200 hover:shadow-md",
-        isDragging && !isOverlay && "border-indigo-200"
+        "bg-white border rounded-2xl p-3 shadow-sm transition-all group relative overflow-hidden flex flex-col h-full",
+        isOverlay ? "shadow-2xl border-indigo-500 ring-4 ring-indigo-500/10 shadow-indigo-200" : "border-slate-200 hover:shadow-xl hover:shadow-slate-200/40",
+        isDragging && !isOverlay && "border-indigo-200 overflow-hidden"
       )}
       onClick={!isOverlay ? onClick : undefined}
+      {...attributes}
+      {...listeners}
     >
-      <div className="absolute top-0 left-0 w-1.5 h-full" style={{ backgroundColor: projectColor }} />
+      <div className="absolute top-0 left-0 w-1.5 h-full opacity-0 group-hover:opacity-100 transition-opacity" style={{ backgroundColor: projectColor }} />
       
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex-1" {...attributes} {...listeners}>
-          <div className="flex items-center gap-2 mb-2">
-            <span className={cn(
-              "px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider",
-              task.priority === 'high' ? "bg-red-50 text-red-600" : task.priority === 'medium' ? "bg-amber-50 text-amber-600" : "bg-blue-50 text-blue-600"
-            )}>
-              {task.priority}
-            </span>
-            {isOverlay && (
-              <span className="bg-indigo-600 text-white px-1.5 py-0.5 rounded text-[8px] font-black uppercase">Moving</span>
+      <div className="flex flex-col gap-2 h-full justify-between pointer-events-none">
+        <div className="space-y-2">
+          <div className="flex items-start justify-between">
+            <div className="flex flex-wrap gap-1">
+              <span className={cn(
+                "px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider shadow-sm",
+                task.priority === 'high' ? "bg-rose-500 text-white" : task.priority === 'medium' ? "bg-amber-400 text-white" : "bg-sky-500 text-white"
+              )}>
+                {task.priority}
+              </span>
+              {task.assignee && (
+                 <div className="flex items-center gap-1 bg-slate-900 text-white px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider shadow-sm">
+                    <User size={7} className="text-indigo-400" />
+                    {task.assignee.split('@')[0]}
+                 </div>
+              )}
+            </div>
+            
+            {!isOverlay && (
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(task.id);
+                }}
+                className="p-1 hover:bg-red-50 rounded-lg text-slate-200 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100 pointer-events-auto"
+              >
+                <Trash2 size={12} />
+              </button>
             )}
           </div>
-          <h4 className="font-bold text-slate-900 leading-tight group-hover:text-indigo-600 transition-colors">
-            {task.title}
-          </h4>
-        </div>
-        {!isOverlay && (
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all shrink-0">
-            <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(task.id);
-              }}
-              className="p-2 hover:bg-red-50 rounded-xl text-slate-400 hover:text-red-500 transition-all"
-            >
-              <Trash2 size={16} />
-            </button>
+
+          <div className="min-h-[32px]">
+            <h4 className="text-xs font-bold text-slate-900 leading-tight transition-colors line-clamp-3">
+              {task.title}
+            </h4>
           </div>
-        )}
-      </div>
-
-      <div className="flex items-center justify-between mt-4">
-        <div className="flex items-center gap-4">
-           {task.subTasks.length > 0 && (
-             <span className="flex items-center text-[10px] font-bold text-slate-400">
-               <CheckCircle2 size={12} className="mr-1 text-emerald-500" />
-               {completedSubTasks}/{task.subTasks.length}
-             </span>
-           )}
-           {task.comments && task.comments.length > 0 && (
-             <span className="flex items-center text-[10px] font-bold text-slate-400">
-               <MessageSquare size={12} className="mr-1" />
-               {task.comments.length}
-             </span>
-           )}
-           {task.dueDate && (
-             <span className="flex items-center text-[10px] font-bold text-slate-400">
-               <Clock size={12} className="mr-1" />
-               {format(task.dueDate, 'MMM d')}
-             </span>
-           )}
         </div>
-        
-        {!isOverlay && (
-          <button 
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsExpanded(!isExpanded);
-            }}
-            className="text-[10px] font-black text-indigo-600 hover:text-indigo-700 tracking-wider flex items-center gap-1 uppercase"
-          >
-            {isExpanded ? 'Hide' : 'Quick View'}
-            <ChevronDown size={12} className={cn("transition-transform", isExpanded && "rotate-180")} />
-          </button>
-        )}
-      </div>
 
-      {task.subTasks.length > 0 && (
-        <div className="mt-3 w-full bg-slate-100 h-1 rounded-full overflow-hidden">
-          <motion.div 
-            className="bg-emerald-500 h-full"
-            initial={{ width: 0 }}
-            animate={{ width: `${progress}%` }}
-            transition={{ duration: 0.5 }}
-          />
-        </div>
-      )}
-
-      <AnimatePresence>
-        {isExpanded && !isOverlay && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="pt-6 mt-4 border-t border-slate-100 space-y-4 font-medium">
-               <div className="space-y-2">
-                 {task.subTasks.map(st => (
-                   <div key={st.id} className="flex items-center gap-3 bg-slate-50 p-2 rounded-xl">
-                     <button 
-                       onClick={() => {
-                         onUpdate({
-                           ...task,
-                           subTasks: task.subTasks.map(item => item.id === st.id ? { ...item, isCompleted: !item.isCompleted } : item)
-                         })
-                       }}
-                     >
-                       {st.isCompleted ? (
-                         <CheckCircle2 size={18} className="text-emerald-500" />
-                       ) : (
-                         <Circle size={18} className="text-slate-300" />
-                       )}
-                     </button>
-                     <span className={cn("text-xs", st.isCompleted ? "text-slate-400 line-through" : "text-slate-700")}>
-                       {st.title}
-                     </span>
-                   </div>
-                 ))}
+        <div className="flex flex-col gap-2 mt-auto pt-2 border-t border-slate-50">
+          {task.subTasks.length > 0 && (
+            <div className="space-y-1">
+               <div className="flex items-center justify-between">
+                  <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Progress</span>
+                  <span className="text-[8px] font-black text-slate-900">{Math.round(progress)}%</span>
                </div>
+               <div className="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
+                <motion.div 
+                  className="h-full rounded-full"
+                  style={{ backgroundColor: projectColor }}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${progress}%` }}
+                  transition={{ duration: 0.5 }}
+                />
+              </div>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+               {task.dueDate && (
+                 <div className={cn(
+                   "flex items-center text-[8px] font-black uppercase tracking-widest",
+                   task.dueDate < new Date() && task.status !== 'completed' ? "text-rose-500" : "text-slate-400"
+                 )}>
+                   <Clock size={10} className="mr-0.5" />
+                   {format(task.dueDate, 'MMM d')}
+                 </div>
+               )}
+               {task.comments && task.comments.length > 0 && (
+                 <div className="flex items-center text-[8px] font-black text-slate-400 uppercase tracking-widest">
+                   <MessageSquare size={10} className="mr-0.5 text-sky-500" />
+                   {task.comments.length}
+                 </div>
+               )}
+            </div>
+            
+            {!isOverlay && (
+               <div className="w-5 h-5 rounded-lg bg-slate-50 flex items-center justify-center text-slate-300 group-hover:text-indigo-600 group-hover:bg-indigo-50 transition-all">
+                  <Maximize2 size={10} />
+               </div>
+            )}
+          </div>
+        </div>
+      </div>
     </motion.div>
   );
 }
@@ -1990,7 +2027,11 @@ function AssetsView({ project, onUpdateProject }: { project: Project, onUpdatePr
                   {asset.type === 'link' ? 'Open Link' : 'Open Card'} <ExternalLink size={14} />
                 </a>
                 {asset.type === 'file' && (
-                   <button className="text-slate-400 hover:text-indigo-600 transition-colors" title="Download File">
+                   <button 
+                     onClick={() => window.open(asset.url, '_blank')}
+                     className="text-slate-400 hover:text-indigo-600 transition-colors" 
+                     title="Download File"
+                   >
                       <Download size={16} />
                    </button>
                 )}
@@ -2009,8 +2050,43 @@ function NotesView({ project, onUpdateProject }: { project: Project, onUpdatePro
   const [noteTitle, setNoteTitle] = useState('');
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitleValue, setEditTitleValue] = useState('');
-  const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
+
+  const notes = project.notes || [];
+  const activeNote = notes.find(n => n.id === activeNoteId);
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      Placeholder.configure({
+        placeholder: 'Start brainstorming, taking meeting notes, or journaling here...',
+      }),
+      TiptapLink.configure({
+        openOnClick: false,
+      }),
+    ],
+    content: activeNote?.content || '',
+    editorProps: {
+      attributes: {
+        class: 'prose prose-sm max-w-none focus:outline-none min-h-full text-slate-600',
+      },
+    },
+    onUpdate: ({ editor }) => {
+      if (activeNoteId) {
+        const updatedNotes = project.notes?.map(n => 
+          n.id === activeNoteId ? { ...n, content: editor.getHTML(), updatedAt: new Date() } : n
+        ) || [];
+        onUpdateProject({ ...project, notes: updatedNotes });
+      }
+    },
+  }, [activeNoteId]);
+
+  // Sync editor content when switching notes
+  useEffect(() => {
+    if (editor && activeNote && editor.getHTML() !== activeNote.content) {
+      editor.commands.setContent(activeNote.content);
+    }
+  }, [activeNoteId, editor]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -2023,16 +2099,15 @@ function NotesView({ project, onUpdateProject }: { project: Project, onUpdatePro
   }, [isFullScreen]);
 
   const stats = useMemo(() => {
-    const notes = project.notes || [];
-    const activeNote = notes.find(n => n.id === activeNoteId);
-    const words = activeNote?.content.split(/\s+/).filter(Boolean).length || 0;
-    const chars = activeNote?.content.length || 0;
+    if (!activeNote) return { words: 0, chars: 0, readTime: 0 };
+    const div = document.createElement('div');
+    div.innerHTML = activeNote.content || '';
+    const text = div.textContent || div.innerText || '';
+    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+    const chars = text.length;
     const readTime = Math.max(1, Math.ceil(words / 200));
     return { words, chars, readTime };
-  }, [project.notes, activeNoteId]);
-
-  const notes = project.notes || [];
-  const activeNote = notes.find(n => n.id === activeNoteId);
+  }, [activeNote]);
 
   React.useEffect(() => {
     if (activeNoteId && !notes.find(n => n.id === activeNoteId)) {
@@ -2058,41 +2133,14 @@ function NotesView({ project, onUpdateProject }: { project: Project, onUpdatePro
     }
   };
 
-  const updateNoteContent = (content: string) => {
-    if (!activeNote) return;
-    const updatedNotes = notes.map(n => 
-      n.id === activeNoteId ? { ...n, content, updatedAt: new Date() } : n
-    );
-    onUpdateProject({ ...project, notes: updatedNotes });
-  };
-
-  const formatText = (command: string) => {
-    const textarea = document.getElementById('note-editor') as HTMLTextAreaElement;
-    if (!textarea) return;
-
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const text = textarea.value;
-    const selectedText = text.substring(start, end);
-    
-    let replacement = '';
-    switch (command) {
-      case 'bold': replacement = `**${selectedText}**`; break;
-      case 'italic': replacement = `*${selectedText}*`; break;
-      case 'heading': replacement = `\n# ${selectedText}`; break;
-      case 'list': replacement = `\n- ${selectedText}`; break;
-      default: return;
-    }
-
-    const newText = text.substring(0, start) + replacement + text.substring(end);
-    updateNoteContent(newText);
-    
-    // Reset focus and selection
-    setTimeout(() => {
-      textarea.focus();
-      textarea.setSelectionRange(start + 2, start + 2 + selectedText.length);
-    }, 10);
-  };
+  const toggleBold = () => editor?.chain().focus().toggleBold().run();
+  const toggleItalic = () => editor?.chain().focus().toggleItalic().run();
+  const toggleHeading1 = () => editor?.chain().focus().toggleHeading({ level: 1 }).run();
+  const toggleHeading2 = () => editor?.chain().focus().toggleHeading({ level: 2 }).run();
+  const toggleBulletList = () => editor?.chain().focus().toggleBulletList().run();
+  const toggleOrderedList = () => editor?.chain().focus().toggleOrderedList().run();
+  const toggleBlockquote = () => editor?.chain().focus().toggleBlockquote().run();
+  const toggleCodeBlock = () => editor?.chain().focus().toggleCodeBlock().run();
 
   const handleUpdateTitle = (e: React.FormEvent) => {
     e.preventDefault();
@@ -2112,105 +2160,124 @@ function NotesView({ project, onUpdateProject }: { project: Project, onUpdatePro
   };
 
   return (
-    <div className="flex h-[calc(100vh-200px)] py-8 gap-8">
-      <div className="w-80 shrink-0 flex flex-col gap-6">
-        <div className="flex items-center justify-between px-2">
-           <h2 className="text-2xl font-black text-slate-900 tracking-tight">Project Notes</h2>
-           <button 
+    <div className="flex bg-white rounded-3xl overflow-hidden border border-slate-100 shadow-sm h-[calc(100vh-280px)] mt-4">
+      <div className="w-80 border-r border-slate-100 bg-slate-50/30 flex flex-col shrink-0">
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white">
+          <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">Journal</h3>
+          <button 
             onClick={() => setIsAdding(true)} 
-            className="p-2.5 bg-slate-900 text-white rounded-2xl hover:bg-black transition-all shadow-lg active:scale-95"
-            title="Create New Note"
-           >
-             <Plus size={18} />
-           </button>
+            className="p-1.5 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
+          >
+            <Plus size={16} />
+          </button>
         </div>
-
-        <div className="flex-1 overflow-y-auto no-scrollbar space-y-3 pb-8 px-2">
+        <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-3">
           <AnimatePresence>
             {isAdding && (
               <motion.form 
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
                 onSubmit={addNote} 
-                className="bg-white p-5 rounded-3xl border-2 border-indigo-500 shadow-xl shadow-indigo-100"
+                className="bg-white p-4 rounded-2xl border-2 border-indigo-500 shadow-xl shadow-indigo-100 mb-4"
               >
                  <input 
                    autoFocus
                    value={noteTitle}
                    onChange={e => setNoteTitle(e.target.value)}
-                   placeholder="Note title..."
-                   className="w-full border-0 focus:ring-0 text-sm font-black bg-transparent mb-4"
+                   placeholder="Document title..."
+                   className="w-full border-0 focus:ring-0 text-sm font-bold bg-transparent p-0 mb-3"
                  />
                  <div className="flex justify-end gap-2">
-                    <button type="button" onClick={() => setIsAdding(false)} className="text-[10px] font-black uppercase text-slate-400 hover:text-slate-600 px-3 py-2 rounded-xl transition-colors">Cancel</button>
-                    <button type="submit" className="text-[10px] font-black uppercase text-white bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-xl shadow-lg shadow-indigo-200 transition-all">Create</button>
+                    <button type="button" onClick={() => setIsAdding(false)} className="text-[10px] font-black uppercase text-slate-400 hover:text-slate-600 px-2 py-1">Cancel</button>
+                    <button type="submit" className="text-[10px] font-black uppercase text-white bg-indigo-600 px-3 py-1 rounded-lg">Create</button>
                  </div>
               </motion.form>
             )}
           </AnimatePresence>
 
           {notes.length === 0 && !isAdding ? (
-            <div className="py-24 text-center bg-white rounded-2xl border border-dashed border-slate-200">
-              <FileText size={48} className="mx-auto mb-4 text-slate-100" />
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-300">Journal is Empty</p>
+            <div className="text-center py-20">
+               <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4 text-slate-300">
+                  <FileText size={20} />
+               </div>
+               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No entries yet</p>
             </div>
           ) : (
-            notes.map(note => (
-              <motion.div 
-                layout
-                key={note.id}
-                onClick={() => {
-                  setActiveNoteId(note.id);
-                  setIsEditingTitle(false);
-                }}
-                className={cn(
-                  "p-5 rounded-2xl cursor-pointer transition-all border group relative overflow-hidden",
-                  activeNoteId === note.id 
-                    ? "bg-white border-indigo-100 shadow-xl ring-1 ring-indigo-50/50" 
-                    : "bg-white/50 border-transparent hover:bg-white hover:border-slate-200 hover:shadow-md"
-                )}
-              >
-                 {activeNoteId === note.id && (
-                   <div className="absolute top-0 left-0 w-2 h-full bg-indigo-600" />
-                 )}
-                 <div className="flex items-start justify-between mb-2">
-                    <h4 className={cn("text-sm font-black truncate pr-4", activeNoteId === note.id ? "text-indigo-600" : "text-slate-900")}>
-                      {note.title}
-                    </h4>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); deleteNote(note.id); }}
-                      className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                 </div>
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{format(note.updatedAt, 'MMM d, h:mm a')}</p>
-              </motion.div>
-            ))
+            notes.map(note => {
+               const div = document.createElement('div');
+               div.innerHTML = note.content || '';
+               const plainText = div.textContent || div.innerText || '';
+               const wordCount = plainText.trim() ? plainText.trim().split(/\s+/).length : 0;
+
+               return (
+                 <motion.div 
+                   key={note.id}
+                   layout
+                   onClick={() => {
+                     setActiveNoteId(note.id);
+                     setIsEditingTitle(false);
+                   }}
+                   className={cn(
+                     "p-4 rounded-2xl cursor-pointer transition-all border relative group overflow-hidden",
+                     activeNoteId === note.id 
+                       ? "bg-white border-indigo-200 shadow-lg ring-1 ring-indigo-50" 
+                       : "bg-transparent border-transparent hover:bg-white hover:border-slate-200 hover:shadow-sm"
+                   )}
+                 >
+                     {activeNoteId === note.id && (
+                       <div className="absolute top-0 left-0 w-1.5 h-full bg-indigo-600" />
+                     )}
+                     <div className="flex items-start justify-between mb-2">
+                       <h4 className={cn("text-xs font-bold truncate pr-6 transition-colors", activeNoteId === note.id ? "text-indigo-600" : "text-slate-900")}>
+                         {note.title}
+                       </h4>
+                       <button 
+                         onClick={(e) => { e.stopPropagation(); deleteNote(note.id); }}
+                         className="opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-rose-500 transition-all rounded-lg hover:bg-rose-50"
+                       >
+                         <Trash2 size={12} />
+                       </button>
+                     </div>
+                     <div className="flex items-center justify-between">
+                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{format(note.updatedAt, 'MMM d')}</p>
+                       <div className="text-[9px] font-bold text-slate-300">{wordCount > 0 ? `${wordCount} words` : 'Empty'}</div>
+                     </div>
+                 </motion.div>
+               );
+            })
           )}
         </div>
       </div>
 
       <div className={cn(
-        "flex-1 bg-white rounded-2xl border border-slate-100 shadow-2xl flex flex-col overflow-hidden relative border-opacity-50 transition-all duration-500 ease-in-out",
-        isFullScreen ? "fixed inset-0 z-[100] rounded-none border-none shadow-none" : "relative"
+        "flex-1 bg-white flex flex-col overflow-hidden relative transition-all duration-500 ease-in-out",
+        isFullScreen ? "fixed inset-0 z-[100] pt-12" : "relative"
       )}>
         {activeNote ? (
           <div className={cn(
-            "flex-1 flex flex-col transition-all duration-500",
-            isFullScreen ? "max-w-4xl mx-auto w-full px-8 md:px-12 pt-20 pb-12" : "pt-12 px-12 pb-8"
+            "flex-1 flex flex-col transition-all duration-500 relative",
+            isFullScreen ? "max-w-4xl mx-auto w-full px-8 md:px-16 pt-12 pb-12" : "pt-8 px-12 pb-8"
           )}>
              {isFullScreen && (
                <button 
                  onClick={() => setIsFullScreen(false)}
-                 className="fixed top-8 right-8 p-3 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-2xl transition-all active:scale-95"
+                 className="fixed top-8 right-8 p-3 bg-slate-50 hover:bg-slate-100 text-slate-400 rounded-2xl transition-all active:scale-95 z-[110]"
                >
                  <Minimize2 size={20} />
                </button>
              )}
-             <div className="mb-8 flex items-start justify-between">
-                <div className="flex-1 max-w-2xl">
+             
+             <div className="flex items-center gap-2 mb-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                <span>Projects</span>
+                <ChevronRight size={10} />
+                <span className="text-indigo-600">{project.name}</span>
+                <ChevronRight size={10} />
+                <span className="text-slate-900">Personal Journal</span>
+             </div>
+
+             <div className="mb-6 flex items-start justify-between">
+                <div className="flex-1">
                    {isEditingTitle ? (
                      <form onSubmit={handleUpdateTitle} className="flex gap-2">
                         <input 
@@ -2226,80 +2293,53 @@ function NotesView({ project, onUpdateProject }: { project: Project, onUpdatePro
                         <h3 className="text-4xl font-black text-slate-900 tracking-tight">{activeNote.title}</h3>
                         <button 
                           onClick={() => { setEditTitleValue(activeNote.title); setIsEditingTitle(true); }}
-                          className="opacity-0 group-hover:opacity-100 p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-2xl transition-all"
+                          className="opacity-0 group-hover:opacity-100 p-2 text-slate-200 hover:text-indigo-600 hover:bg-indigo-50 rounded-2xl transition-all"
                         >
                           <Edit2 size={24} />
                         </button>
                      </div>
                    )}
-                   <div className="flex items-center gap-3 mt-4">
-                      <div className="px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-600 text-[10px] font-black uppercase tracking-widest">
-                        Document
-                      </div>
-                      <div className="w-1.5 h-1.5 rounded-full bg-slate-200" />
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Last edited {format(activeNote.updatedAt, 'PPPP p')}</span>
+                   <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-3 flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      Last synced at {format(activeNote.updatedAt, 'h:mm a')}
                    </div>
                 </div>
              </div>
 
              {/* Formatting Toolbar */}
-             <div className="flex items-center justify-between mb-8">
-               <div className="flex items-center gap-2 p-1.5 bg-slate-50 w-fit rounded-2xl border border-slate-100">
-                  <button onClick={() => formatText('heading')} className="p-2.5 hover:bg-white hover:shadow-sm rounded-xl text-slate-500 hover:text-indigo-600 transition-all font-black"><Heading1 size={18} /></button>
-                  <div className="w-px h-6 bg-slate-200 mx-1" />
-                  <button onClick={() => formatText('bold')} className="p-2.5 hover:bg-white hover:shadow-sm rounded-xl text-slate-500 hover:text-indigo-600 transition-all"><Bold size={18} /></button>
-                  <button onClick={() => formatText('italic')} className="p-2.5 hover:bg-white hover:shadow-sm rounded-xl text-slate-500 hover:text-indigo-600 transition-all"><Italic size={18} /></button>
-                  <div className="w-px h-6 bg-slate-200 mx-1" />
-                  <button onClick={() => formatText('list')} className="p-2.5 hover:bg-white hover:shadow-sm rounded-xl text-slate-500 hover:text-indigo-600 transition-all"><ListIcon size={18} /></button>
+             <div className="flex items-center justify-between mb-6 sticky top-0 py-2 bg-white z-10 border-b border-slate-50">
+               <div className="flex items-center gap-1.5 p-1 bg-slate-50/80 backdrop-blur-md rounded-2xl border border-slate-100 ring-4 ring-white">
+                  <button onClick={toggleHeading1} className={cn("p-2 rounded-lg transition-all", editor?.isActive('heading', { level: 1 }) ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:bg-white hover:text-indigo-600")} title="Heading 1"><Heading1 size={16} /></button>
+                  <button onClick={toggleHeading2} className={cn("p-2 rounded-lg transition-all", editor?.isActive('heading', { level: 2 }) ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:bg-white hover:text-indigo-600")} title="Heading 2"><Heading2 size={16} /></button>
+                  <div className="w-px h-6 bg-slate-200 mx-0.5" />
+                  <button onClick={toggleBold} className={cn("p-2 rounded-lg transition-all", editor?.isActive('bold') ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:bg-white hover:text-indigo-600")} title="Bold"><Bold size={16} /></button>
+                  <button onClick={toggleItalic} className={cn("p-2 rounded-lg transition-all", editor?.isActive('italic') ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:bg-white hover:text-indigo-600")} title="Italic"><Italic size={16} /></button>
+                  <div className="w-px h-6 bg-slate-200 mx-0.5" />
+                  <button onClick={toggleBulletList} className={cn("p-2 rounded-lg transition-all", editor?.isActive('bulletList') ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:bg-white hover:text-indigo-600")} title="Bullet List"><ListIcon size={16} /></button>
+                  <button onClick={toggleOrderedList} className={cn("p-2 rounded-lg transition-all", editor?.isActive('orderedList') ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:bg-white hover:text-indigo-600")} title="Ordered List"><ListOrdered size={16} /></button>
+                  <div className="w-px h-6 bg-slate-200 mx-0.5" />
+                  <button onClick={toggleBlockquote} className={cn("p-2 rounded-lg transition-all", editor?.isActive('blockquote') ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:bg-white hover:text-indigo-600")} title="Blockquote"><Quote size={16} /></button>
+                  <button onClick={toggleCodeBlock} className={cn("p-2 rounded-lg transition-all", editor?.isActive('codeBlock') ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:bg-white hover:text-indigo-600")} title="Code Block"><Code size={16} /></button>
                </div>
                
                <div className="flex items-center gap-2">
-                 <button 
-                   onClick={() => setIsPreviewMode(!isPreviewMode)}
-                   className={cn(
-                     "px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2",
-                     isPreviewMode 
-                       ? "bg-indigo-600 text-white shadow-lg shadow-indigo-100" 
-                       : "bg-white border border-slate-200 text-slate-500 hover:bg-slate-50"
-                   )}
-                 >
-                   {isPreviewMode ? <Edit2 size={14} /> : <BookOpen size={14} />}
-                   {isPreviewMode ? 'Exit Preview' : 'Preview Mode'}
-                 </button>
-
-                 {!isPreviewMode && (
-                   <button 
-                     onClick={() => setIsFullScreen(!isFullScreen)}
-                     className="p-2.5 bg-white border border-slate-200 text-slate-500 rounded-2xl hover:bg-slate-50 transition-all"
-                     title={isFullScreen ? "Exit Full Screen" : "Full Screen Mode"}
-                   >
-                     {isFullScreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-                   </button>
-                 )}
+                  <button 
+                    onClick={() => setIsFullScreen(!isFullScreen)}
+                    className="p-2.5 bg-white border border-slate-200 text-slate-400 rounded-2xl hover:bg-slate-50 transition-all"
+                    title={isFullScreen ? "Exit Full Screen" : "Full Screen Mode"}
+                  >
+                    {isFullScreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+                  </button>
                </div>
              </div>
 
-             {isPreviewMode ? (
-               <div className="flex-1 overflow-y-auto no-scrollbar pr-4">
-                 <div className="markdown-body">
-                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                     {activeNote.content || '_No content yet. Exit preview to start writing._'}
-                   </ReactMarkdown>
-                 </div>
-               </div>
-             ) : (
-               <textarea 
-                 id="note-editor"
-                 value={activeNote.content}
-                 onChange={e => updateNoteContent(e.target.value)}
-                 placeholder="Capture your thoughts, ideas, and strategies here..."
-                 className="flex-1 w-full bg-transparent border-0 focus:ring-0 text-slate-600 font-medium leading-relaxed resize-none text-xl p-0 placeholder:text-slate-200 scrollbar-thin scrollbar-thumb-slate-100"
-               />
-             )}
+             <div className="flex-1 overflow-y-auto no-scrollbar pb-20">
+               <EditorContent editor={editor} />
+             </div>
              
              <div className={cn(
-                "mt-8 pt-8 border-t border-slate-50 flex justify-between items-center transition-all",
-                isFullScreen ? "opacity-60 hover:opacity-100" : ""
+                "mt-4 pt-6 border-t border-slate-50 flex justify-between items-center bg-white",
+                isFullScreen ? "fixed bottom-0 left-0 right-0 max-w-4xl mx-auto px-16 pb-12" : "relative"
               )}>
                  <div className="flex items-center gap-2 text-[10px] font-black text-slate-300 uppercase tracking-widest">
                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -2322,15 +2362,15 @@ function NotesView({ project, onUpdateProject }: { project: Project, onUpdatePro
               </div>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center p-20 text-center">
-             <div className="w-32 h-32 bg-slate-50 rounded-2xl flex items-center justify-center mb-8 text-slate-200">
+          <div className="flex-1 flex flex-col items-center justify-center p-20 text-center bg-slate-50/50">
+             <div className="w-32 h-32 bg-white rounded-3xl shadow-2xl flex items-center justify-center mb-8 text-slate-200 rotate-3 border border-slate-100">
                <FileText size={56} />
              </div>
-             <h3 className="text-3xl font-black text-slate-900 tracking-tight">Select a document</h3>
-             <p className="text-slate-400 max-w-sm mt-4 text-lg font-medium">Your thoughts and project details deserve a home. Select an existing note or create a fresh one.</p>
+             <h3 className="text-3xl font-black text-slate-900 tracking-tight">Your thinking space</h3>
+             <p className="text-slate-400 max-w-sm mt-4 text-lg font-medium leading-relaxed">Select an entry from the sidebar or create a new one to begin your next big idea.</p>
              <button 
               onClick={() => setIsAdding(true)}
-              className="mt-10 px-8 py-4 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 active:scale-95 flex items-center gap-3"
+              className="mt-10 px-10 py-5 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-900 transition-all shadow-xl shadow-indigo-100 active:scale-95 flex items-center gap-3"
              >
                <Plus size={20} />
                Start Writing
@@ -2338,6 +2378,107 @@ function NotesView({ project, onUpdateProject }: { project: Project, onUpdatePro
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function SettingsView({ 
+  project, 
+  onUpdateProject, 
+  onDeleteProject, 
+  setActiveProjectId 
+}: { 
+  project: Project, 
+  onUpdateProject: (p: Project) => void, 
+  onDeleteProject: (id: string) => void,
+  setActiveProjectId: (id: string | null) => void
+}) {
+  const [name, setName] = useState(project.name);
+  const [desc, setDesc] = useState(project.description || '');
+  const [category, setCategory] = useState(project.category || '');
+  
+  const handleSave = () => {
+    onUpdateProject({
+      ...project,
+      name,
+      description: desc,
+      category
+    });
+  };
+
+  return (
+    <div className="max-w-4xl space-y-12 pb-20">
+      <section className="bg-white rounded-3xl border border-slate-100 p-10 shadow-sm">
+        <h3 className="text-xl font-black text-slate-900 mb-8 tracking-tight flex items-center gap-3">
+          <Layout size={24} className="text-indigo-600" />
+          General Information
+        </h3>
+        
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Project Name</label>
+              <input 
+                value={name}
+                onChange={e => setName(e.target.value)}
+                className="w-full bg-slate-50 border-0 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-indigo-500 font-bold transition-all text-slate-900 placeholder:text-slate-300"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Category Label</label>
+              <input 
+                value={category}
+                onChange={e => setCategory(e.target.value)}
+                className="w-full bg-slate-50 border-0 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-indigo-500 font-bold transition-all text-slate-900 placeholder:text-slate-300"
+              />
+            </div>
+          </div>
+          
+          <div>
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Description</label>
+            <textarea 
+              value={desc}
+              onChange={e => setDesc(e.target.value)}
+              rows={4}
+              className="w-full bg-slate-50 border-0 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-indigo-500 font-medium transition-all text-slate-600 resize-none"
+            />
+          </div>
+
+          <div className="pt-6 flex justify-end">
+            <button 
+              onClick={handleSave}
+              className="px-8 py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-900 transition-all shadow-xl shadow-indigo-100 active:scale-95 flex items-center gap-2"
+            >
+              <CheckCircle2 size={16} />
+              Update Project
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-rose-50/50 rounded-3xl border border-rose-100 p-10">
+        <div className="flex items-start justify-between gap-12">
+           <div className="flex-1">
+             <h3 className="text-xl font-black text-rose-900 mb-2 tracking-tight flex items-center gap-3">
+               <Trash2 size={24} className="text-rose-500" />
+               Danger Zone
+             </h3>
+             <p className="text-sm font-medium text-rose-600/70 leading-relaxed">
+               Once you delete a project, there is no going back. Please be certain. 
+               This will permanently remove all tasks, assets, and notes associated with <strong>{project.name}</strong>.
+             </p>
+           </div>
+           <button 
+             onClick={() => {
+               onDeleteProject(project.id);
+               setActiveProjectId(null);
+             }}
+             className="px-8 py-4 bg-rose-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-700 transition-all shadow-xl shadow-rose-100 active:scale-95"
+           >
+             Terminate Project
+           </button>
+        </div>
+      </section>
     </div>
   );
 }

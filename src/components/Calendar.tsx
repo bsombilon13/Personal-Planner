@@ -21,6 +21,8 @@ import {
 import { 
   ChevronLeft, 
   ChevronRight, 
+  ChevronDown,
+  ChevronUp,
   Plus, 
   LayoutGrid, 
   List, 
@@ -29,7 +31,8 @@ import {
   MoreHorizontal,
   Clock,
   MapPin,
-  Printer
+  Printer,
+  Edit2
 } from 'lucide-react';
 import { Activity, CalendarViewType, CategoryColors, Project, ProjectTask } from '@/src/types';
 import { cn, isActivityOnDay, calculateEndTime, generateGoogleCalendarUrl } from '@/src/lib/utils';
@@ -230,41 +233,7 @@ export default function Calendar({
           </AnimatePresence>
         </div>
 
-        {/* Category Settings */}
-        <div className="mt-auto border-t border-slate-200 bg-white p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-2">
-              <Palette size={14} className="text-slate-400" />
-              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Labels</h2>
-            </div>
-            <button 
-              onClick={() => {
-                const name = prompt('New category name:');
-                if (name) onAddCategory(name, '#6366f1');
-              }}
-              className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700"
-            >
-              + ADD
-            </button>
-          </div>
-          <div className="space-y-3">
-            {Object.entries(categoryColors).map(([category, color]) => (
-              <div key={category} className="flex items-center justify-between group">
-                <div className="flex items-center space-x-3">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-                  <span className="text-xs font-semibold text-slate-700">{category}</span>
-                </div>
-                <input 
-                  type="color" 
-                  value={color}
-                  onChange={(e) => onUpdateCategoryColor(category, e.target.value)}
-                  className="w-4 h-4 rounded-full border-0 p-0 overflow-hidden cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
-                  title={`Change ${category} color`}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
+        {/* Removed Labels section as requested */}
       </aside>
 
       {/* Main Calendar Panel */}
@@ -402,6 +371,7 @@ export default function Calendar({
                     onTaskClick={handleTaskClick}
                     onDayClick={handleDayClick}
                     isActivityOnDay={isActivityOnDay}
+                    onEditActivity={onEditActivity}
                   />
                 </motion.div>
               )}
@@ -414,6 +384,7 @@ export default function Calendar({
                       projectTasks={showProjectTasks ? projectTasks : []}
                       categoryColors={categoryColors} 
                       onActivityClick={handleActivityClick}
+                      onEditActivity={onEditActivity}
                       onTaskClick={handleTaskClick}
                       isActivityOnDay={isActivityOnDay}
                       onSlotClick={handleSlotClick}
@@ -429,6 +400,7 @@ export default function Calendar({
                       projectTasks={showProjectTasks ? projectTasks : []}
                       categoryColors={categoryColors} 
                       onActivityClick={handleActivityClick}
+                      onEditActivity={onEditActivity}
                       onTaskClick={handleTaskClick}
                       isActivityOnDay={isActivityOnDay}
                       onSlotClick={handleSlotClick}
@@ -508,7 +480,7 @@ export default function Calendar({
                       selectedActivity.status === 'in-progress' ? "bg-blue-50 text-blue-600 border-blue-100" :
                       "bg-emerald-50 text-emerald-600 border-emerald-100"
                     )}>
-                      {selectedActivity.status.toUpperCase()}
+                      {selectedActivity.status?.toUpperCase() || ''}
                     </div>
 
                     <a 
@@ -625,7 +597,7 @@ export default function Calendar({
                           selectedTask.status === 'in-progress' ? "bg-blue-50 text-blue-600 border-blue-100" :
                           "bg-emerald-50 text-emerald-600 border-emerald-100"
                         )}>
-                          {selectedTask.status.toUpperCase()}
+                          {selectedTask.status?.toUpperCase() || ''}
                         </div>
                       </div>
                     </div>
@@ -644,12 +616,14 @@ export default function Calendar({
 const ActivityCard = ({ 
   activity, 
   onActivityClick, 
+  onEditActivity,
   categoryColors,
   style,
   className
 }: { 
   activity: Activity, 
   onActivityClick: (activity: Activity) => void, 
+  onEditActivity: (activity: Activity) => void,
   categoryColors: Record<string, string>,
   style?: React.CSSProperties,
   className?: string,
@@ -686,12 +660,25 @@ const ActivityCard = ({
         className
       )}
     >
-      <div className="flex items-center justify-between">
-        <span className="truncate">{activity.title}</span>
-        <GripVertical size={10} className="shrink-0 opacity-50" />
-      </div>
-      <div className="text-[9px] opacity-80 mt-0.5">
-        {activity.startTime} - {calculateEndTime(activity.startTime, activity.duration)}
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between">
+          <span className="truncate">{activity.title}</span>
+          <div className="flex items-center gap-1">
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditActivity(activity);
+              }}
+              className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-white/20 rounded transition-all"
+            >
+              <Edit2 size={10} />
+            </button>
+            <GripVertical size={10} className="shrink-0 opacity-50" />
+          </div>
+        </div>
+        <div className="text-[9px] opacity-80 mt-0.5">
+          {activity.startTime} - {calculateEndTime(activity.startTime, activity.duration)}
+        </div>
       </div>
     </div>
   );
@@ -734,6 +721,7 @@ const MonthView = ({
   projectTasks,
   categoryColors, 
   onActivityClick,
+  onEditActivity,
   onTaskClick,
   onDayClick,
   isActivityOnDay
@@ -744,6 +732,7 @@ const MonthView = ({
   projectTasks: ProjectTask[],
   categoryColors: CategoryColors,
   onActivityClick: (activity: Activity) => void,
+  onEditActivity: (activity: Activity) => void,
   onTaskClick: (task: ProjectTask) => void,
   onDayClick: (day: Date) => void,
   isActivityOnDay: (activity: Activity, day: Date) => boolean
@@ -802,10 +791,20 @@ const MonthView = ({
                     }}
                     style={{ backgroundColor: categoryColors[activity.category] || '#6366f1' }}
                     className={cn(
-                      "px-1 py-0.5 text-[9px] font-bold rounded truncate text-white shadow-sm cursor-pointer hover:scale-[1.02] transition-transform activity-card",
+                      "px-1 py-0.5 text-[9px] font-bold rounded truncate text-white shadow-sm cursor-pointer hover:scale-[1.02] transition-transform activity-card group/activity flex items-center justify-between",
                     )}
                   >
-                    {activity.title}
+                    <span className="truncate">{activity.title}</span>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEditActivity(activity);
+                      }}
+                      className="opacity-0 group-hover/activity:opacity-100 ml-1 p-0.5 hover:bg-white/20 rounded transition-all shrink-0"
+                      title="Edit Activity"
+                    >
+                      <Edit2 size={8} />
+                    </button>
                   </div>
                 ))}
                 {dayTasks.slice(0, 2).map(task => {
@@ -818,10 +817,23 @@ const MonthView = ({
                         onTaskClick(task);
                       }}
                       style={{ backgroundColor: project?.color || '#4f46e5' }}
-                      className="px-1 py-0.5 text-[9px] font-bold rounded truncate text-white shadow-sm flex items-center gap-1 opacity-90 border-l-2 border-white/40 cursor-pointer hover:brightness-110"
+                      className="px-1 py-0.5 text-[9px] font-bold rounded truncate text-white shadow-sm flex items-center justify-between gap-1 opacity-90 border-l-2 border-white/40 cursor-pointer hover:brightness-110 group/task"
                     >
-                      <span className="opacity-70 font-black text-[7px] uppercase tracking-tighter">[{project?.name.substring(0, 3)}]</span>
-                      {task.title}
+                      <div className="flex items-center gap-1 truncate">
+                        <span className="opacity-70 font-black text-[7px] uppercase tracking-tighter shrink-0">[{project?.name.substring(0, 3)}]</span>
+                        <span className="truncate">{task.title}</span>
+                      </div>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // For tasks, we don't have a direct "Edit Task" modal in Calendar, 
+                          // we usually open the TaskDetailModal which has editing.
+                          onTaskClick(task);
+                        }}
+                        className="opacity-0 group-hover/task:opacity-100 p-0.5 hover:bg-white/20 rounded transition-all shrink-0"
+                      >
+                        <Edit2 size={8} />
+                      </button>
                     </div>
                   );
                 })}
@@ -841,6 +853,7 @@ const WeekView = ({
   projectTasks,
   categoryColors,
   onActivityClick,
+  onEditActivity,
   onTaskClick,
   isActivityOnDay,
   onSlotClick
@@ -851,6 +864,7 @@ const WeekView = ({
   projectTasks: ProjectTask[],
   categoryColors: CategoryColors,
   onActivityClick: (activity: Activity) => void,
+  onEditActivity: (activity: Activity) => void,
   onTaskClick: (task: ProjectTask) => void,
   isActivityOnDay: (activity: Activity, day: Date) => boolean,
   onSlotClick?: (date: Date, time: string) => void
@@ -907,6 +921,7 @@ const WeekView = ({
                     key={a.id}
                     activity={a}
                     onActivityClick={onActivityClick}
+                    onEditActivity={onEditActivity}
                     categoryColors={categoryColors}
                     style={{ top: `${top}px`, height: `${height}px` }}
                   />
@@ -954,6 +969,7 @@ const DayView = ({
   projectTasks,
   categoryColors,
   onActivityClick,
+  onEditActivity,
   onTaskClick,
   isActivityOnDay,
   onSlotClick
@@ -964,6 +980,7 @@ const DayView = ({
   projectTasks: ProjectTask[],
   categoryColors: CategoryColors,
   onActivityClick: (activity: Activity) => void,
+  onEditActivity: (activity: Activity) => void,
   onTaskClick: (task: ProjectTask) => void,
   isActivityOnDay: (activity: Activity, day: Date) => boolean,
   onSlotClick?: (date: Date, time: string) => void
@@ -1030,6 +1047,7 @@ const DayView = ({
                 key={a.id}
                 activity={a}
                 onActivityClick={onActivityClick}
+                onEditActivity={onEditActivity}
                 categoryColors={categoryColors}
                 style={{ 
                   top: `${top}px`, 
@@ -1092,6 +1110,64 @@ const ListView = ({
   onActivityClick: (activity: Activity) => void,
   onTaskClick: (task: ProjectTask) => void
 }) => {
+  const [expandedMonths, setExpandedMonths] = useState<Record<string, boolean>>(() => {
+    const currentMonthYear = format(new Date(), 'MMMM yyyy');
+    return { [currentMonthYear]: true };
+  });
+
+  const toggleMonth = (monthYear: string) => {
+    setExpandedMonths(prev => ({
+      ...prev,
+      [monthYear]: !prev[monthYear]
+    }));
+  };
+
+  const handlePrintMonth = (monthYear: string, items: any[]) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const styles = `
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 40px; color: #1e293b; }
+      h1 { font-size: 24px; font-weight: 800; margin-bottom: 24px; border-bottom: 2px solid #f1f5f9; padding-bottom: 12px; }
+      .item { padding: 12px 0; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; }
+      .date { width: 120px; font-size: 14px; color: #64748b; font-weight: 600; }
+      .content { flex: 1; }
+      .title { font-size: 14px; font-weight: 700; color: #0f172a; }
+      .project { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; margin-bottom: 2px; }
+      .time { width: 100px; text-align: right; font-size: 12px; font-weight: 700; color: #64748b; }
+    `;
+
+    const html = `
+      <html>
+        <head>
+          <title>Activities - ${monthYear}</title>
+          <style>${styles}</style>
+        </head>
+        <body>
+          <h1>Activities for ${monthYear}</h1>
+          ${items.length === 0 ? '<p>No activities scheduled.</p>' : items.sort((a, b) => a.date.getTime() - b.date.getTime()).map(item => `
+            <div class="item">
+              <div class="date">${format(item.date, 'MMM d, EEE')}</div>
+              <div class="content">
+                ${item.type === 'task' ? `<div class="project">${projects.find(p => p.id === item.projectId)?.name || 'Project'}</div>` : ''}
+                <div class="title">${item.title}</div>
+              </div>
+              <div class="time">${item.startTime}</div>
+            </div>
+          `).join('')}
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 250);
+  };
+
   const combinedItems = [
     ...activities.map(a => ({ ...a, type: 'activity' as const })),
     ...projectTasks.map(t => ({ 
@@ -1106,14 +1182,22 @@ const ListView = ({
   ];
 
   // Group items by month and year
-  const groupedItems = combinedItems.reduce((groups: Record<string, any[]>, item) => {
-    const monthYear = format(item.date, 'MMMM yyyy');
-    if (!groups[monthYear]) {
-      groups[monthYear] = [];
-    }
-    groups[monthYear].push(item);
+  const currentYear = new Date().getFullYear();
+  const allMonths = Array.from({ length: 12 }, (_, i) => format(new Date(currentYear, i, 1), 'MMMM yyyy'));
+  
+  const groupedItems = allMonths.reduce((groups: Record<string, any[]>, monthYear) => {
+    groups[monthYear] = [];
     return groups;
   }, {});
+
+  combinedItems.forEach(item => {
+    const monthYear = format(item.date, 'MMMM yyyy');
+    // If the item is in a different year, add it to groups dynamically
+    if (!groupedItems[monthYear]) {
+      groupedItems[monthYear] = [];
+    }
+    groupedItems[monthYear].push(item);
+  });
 
   // Sort months chronologically
   const sortedMonths = Object.keys(groupedItems).sort((a, b) => {
@@ -1122,66 +1206,124 @@ const ListView = ({
 
   return (
     <div className="h-full bg-white border border-slate-200 rounded-[32px] overflow-y-auto no-scrollbar shadow-sm p-8">
-      <div className="max-w-3xl mx-auto">
-        {sortedMonths.map((monthYear, monthIndex) => (
-          <div key={monthYear} className={cn("mb-12", monthIndex !== 0 && "pt-8 border-t border-slate-100")}>
-            <h3 className="text-xl font-bold text-slate-900 mb-6 sticky top-0 bg-white/80 backdrop-blur-sm py-2 z-10">
-              {monthYear}
-            </h3>
-            <div className="space-y-4">
-              {groupedItems[monthYear]
-                .sort((a, b) => {
-                  const dateCompare = a.date.getTime() - b.date.getTime();
-                  if (dateCompare !== 0) return dateCompare;
-                  return a.startTime.localeCompare(b.startTime);
-                })
-                .map((item) => {
-                  const isTask = item.type === 'task';
-                  const project = isTask ? projects.find(p => p.id === item.projectId) : null;
-                  
-                  return (
-                    <div 
-                      key={item.id}
-                      onClick={() => isTask ? onTaskClick(item as ProjectTask) : onActivityClick(item as Activity)}
-                      className="flex items-center group cursor-pointer py-3 border-b border-slate-50 last:border-b-0 hover:bg-slate-50 transition-colors rounded-xl px-4 -mx-4"
-                    >
-                      <div className="w-24 shrink-0">
-                        <span className="text-xs font-bold text-slate-400">
-                          {item.startTime}
-                        </span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                           {isTask ? (
-                             <div 
-                               className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider text-white"
-                               style={{ backgroundColor: project?.color || '#4f46e5' }}
-                             >
-                               {project?.name || 'Task'}
-                             </div>
-                           ) : (
-                             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#6366f1' }} />
-                           )}
-                           <h4 className={cn(
-                             "text-sm font-bold truncate group-hover:text-indigo-600 transition-colors",
-                             isTask ? "text-slate-700" : "text-slate-900"
-                           )}>
-                             {item.title}
-                           </h4>
+      <div className="max-w-5xl mx-auto">
+        {sortedMonths.map((monthYear, monthIndex) => {
+          const itemsInMonth = groupedItems[monthYear];
+          const isExpanded = expandedMonths[monthYear];
+
+          return (
+            <div key={monthYear} className={cn("mb-6 last:mb-0", monthIndex !== 0 && "pt-6 border-t-2 border-slate-50")}>
+              <div className="flex items-center justify-between mb-4 sticky top-0 bg-white/95 backdrop-blur-sm py-3 z-10 -mx-4 px-4 rounded-xl">
+                <button 
+                  onClick={() => toggleMonth(monthYear)}
+                  className="flex items-center gap-3 hover:bg-slate-50 px-2 py-1 rounded-xl transition-colors group"
+                >
+                  <div className="p-1 bg-slate-100 rounded-lg text-slate-400 group-hover:text-slate-600 transition-colors">
+                    {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  </div>
+                  <h3 className="text-xl font-black text-slate-900 tracking-tight">
+                    {monthYear}
+                  </h3>
+                  <div className="px-2.5 py-0.5 bg-slate-50 rounded-lg text-[9px] font-black text-slate-400 uppercase tracking-widest border border-slate-100">
+                    {itemsInMonth.length}
+                  </div>
+                </button>
+                
+                <button 
+                  onClick={() => handlePrintMonth(monthYear, itemsInMonth)}
+                  className="flex items-center gap-2 p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm group"
+                  title="Print this month"
+                >
+                  <Printer size={16} />
+                  <span className="text-[10px] font-black uppercase tracking-widest px-1">Print Month</span>
+                </button>
+              </div>
+
+              <AnimatePresence>
+                {isExpanded && (
+                  <motion.div 
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.3, ease: 'easeInOut' }}
+                    className="overflow-hidden"
+                  >
+                    <div className="space-y-1 pb-4">
+                      {itemsInMonth.length === 0 ? (
+                        <div className="py-6 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                          <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">No activities scheduled</p>
                         </div>
-                      </div>
-                      <div className="w-32 shrink-0 text-right">
-                         <span className="text-[10px] font-bold text-slate-400">
-                           {format(item.date, 'MMM d, EEE')}
-                         </span>
-                      </div>
+                      ) : (
+                        itemsInMonth
+                          .sort((a, b) => {
+                            const dateCompare = a.date.getTime() - b.date.getTime();
+                            if (dateCompare !== 0) return dateCompare;
+                            return a.startTime.localeCompare(b.startTime);
+                          })
+                          .map((item) => {
+                            const isTask = item.type === 'task';
+                            const project = isTask ? projects.find(p => p.id === item.projectId) : null;
+                            
+                            return (
+                              <div 
+                                key={item.id}
+                                onClick={() => isTask ? onTaskClick(item as ProjectTask) : onActivityClick(item as Activity)}
+                                className="flex items-center group cursor-pointer py-5 border-b border-slate-50 last:border-b-0 hover:bg-slate-50/50 transition-colors rounded-xl px-4 -mx-4"
+                              >
+                                <div className="w-32 shrink-0">
+                                  <div className="flex flex-col">
+                                    <span className="text-sm font-black text-slate-900">
+                                      {format(item.date, 'd')}
+                                    </span>
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                      {format(item.date, 'EEEE')}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-4">
+                                     {isTask ? (
+                                       <div 
+                                         className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm"
+                                         style={{ backgroundColor: project?.color || '#4f46e5' }}
+                                       />
+                                     ) : (
+                                       <div className="w-2.5 h-2.5 rounded-full bg-indigo-600 shrink-0 shadow-sm" />
+                                     )}
+                                     <div className="flex flex-col min-w-0">
+                                       <h4 className={cn(
+                                         "text-sm font-black truncate group-hover:text-indigo-600 transition-colors",
+                                         isTask ? "text-slate-700" : "text-slate-900"
+                                       )}>
+                                         {item.title}
+                                       </h4>
+                                       {isTask && project && (
+                                         <span className="text-[9px] font-black uppercase tracking-[0.2em] mt-1" style={{ color: project.color }}>
+                                           {project.name}
+                                         </span>
+                                       )}
+                                     </div>
+                                  </div>
+                                </div>
+                                <div className="w-32 shrink-0 text-right">
+                                   <div className="flex items-center justify-end gap-2 text-slate-400">
+                                     <Clock size={14} />
+                                     <span className="text-xs font-black font-mono">
+                                       {item.startTime}
+                                     </span>
+                                   </div>
+                                </div>
+                              </div>
+                            );
+                          })
+                      )}
                     </div>
-                  );
-                })
-              }
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-          </div>
-        ))}
+          );
+        })}
         {combinedItems.length === 0 && (
           <div className="py-20 text-center">
             <CalendarIcon size={48} className="mx-auto text-slate-200 mb-4" />

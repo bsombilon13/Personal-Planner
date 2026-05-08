@@ -116,8 +116,8 @@ export default function App() {
   const [projectTasks, setProjectTasks] = useState<ProjectTask[]>(() => {
     const stored = localStorage.getItem(STORAGE_KEYS.TASKS);
     return stored ? JSON.parse(stored, revivifyDates) : [
-      { id: 't1', projectId: 'p1', title: 'Logo Design', status: 'completed', priority: 'high', dueDate: new Date(new Date().setDate(new Date().getDate() + 2)), assignee: 'John Doe', createdAt: new Date(new Date().setDate(new Date().getDate() - 5)), subTasks: [{ id: 'st1', title: 'Brainstorming', isCompleted: true }, { id: 'st2', title: 'Sketching', isCompleted: true }], comments: [{ id: 'c1', authorName: 'John Doe', text: 'Great first pass on the sketches!', createdAt: new Date() }] },
-      { id: 't2', projectId: 'p1', title: 'Color Palette', status: 'in-progress', priority: 'medium', dueDate: new Date(new Date().setDate(new Date().getDate() + 5)), assignee: 'Jane Smith', createdAt: new Date(new Date().setDate(new Date().getDate() - 3)), subTasks: [], comments: [] },
+      { id: 't1', projectId: 'p1', title: 'Logo Design', status: 'completed', priority: 'high', dueDate: new Date(new Date().setDate(new Date().getDate() + 2)), assignee: 'Bryan Sombilon', creatorName: 'Bryan Sombilon', createdAt: new Date(new Date().setDate(new Date().getDate() - 5)), subTasks: [{ id: 'st1', title: 'Brainstorming', isCompleted: true }, { id: 'st2', title: 'Sketching', isCompleted: true }], comments: [{ id: 'c1', authorName: 'Bryan Sombilon', text: 'Great first pass on the sketches!', createdAt: new Date() }] },
+      { id: 't2', projectId: 'p1', title: 'Color Palette', status: 'in-progress', priority: 'medium', dueDate: new Date(new Date().setDate(new Date().getDate() + 5)), assignee: 'Bryan Sombilon', creatorName: 'Bryan Sombilon', createdAt: new Date(new Date().setDate(new Date().getDate() - 3)), subTasks: [], comments: [] },
     ];
   });
 
@@ -136,7 +136,7 @@ export default function App() {
       {
         id: 'n2',
         title: 'Weekly Sync Notes - May 7',
-        content: '## Attendees\n- Bryan\n- Sarah\n- Mike\n\n## Discussion\n- Discussed the new dashboard layout.\n- Decided to move forward with the Apple Notes style for the global journal.\n- Action item: Update the sidebar to include the new entry point.',
+        content: '## Attendees\n- Bryan Sombilon\n- Sarah\n- Mike\n\n## Discussion\n- Discussed the new dashboard layout.\n- Decided to move forward with the Apple Notes style for the global journal.\n- Action item: Update the sidebar to include the new entry point.',
         category: 'Meeting',
         createdAt: new Date(),
         updatedAt: new Date()
@@ -208,7 +208,10 @@ export default function App() {
   };
 
   const deleteActivity = (id: string) => {
-    setActivities(activities.filter(a => a.id !== id));
+    const activity = activities.find(a => a.id === id);
+    if (window.confirm(`Are you sure you want to delete the activity "${activity?.title}"?`)) {
+      setActivities(activities.filter(a => a.id !== id));
+    }
   };
 
   const updateCategoryColor = (category: string, color: string) => {
@@ -234,18 +237,25 @@ export default function App() {
   };
 
   const deleteProject = (id: string) => {
-    setProjects(projects.filter(p => p.id !== id));
-    setProjectTasks(projectTasks.filter(t => t.projectId !== id));
+    const project = projects.find(p => p.id === id);
+    if (window.confirm(`Are you sure you want to delete "${project?.name}"? This action cannot be undone and will permanently remove all associated tasks, notes, and assets.`)) {
+      setProjects(projects.filter(p => p.id !== id));
+      setProjectTasks(projectTasks.filter(t => t.projectId !== id));
+      if (activeProjectId === id) {
+        setActiveProjectId(null);
+      }
+    }
   };
 
   const updateProject = (updatedProject: Project) => {
     setProjects(projects.map(p => p.id === updatedProject.id ? updatedProject : p));
   };
 
-  const addProjectTask = (taskData: Omit<ProjectTask, 'id' | 'subTasks' | 'comments' | 'createdAt'>) => {
+  const addProjectTask = (taskData: Omit<ProjectTask, 'id' | 'subTasks' | 'comments' | 'createdAt' | 'creatorName'>) => {
     const newTask: ProjectTask = {
       ...taskData,
       id: Math.random().toString(36).substr(2, 9),
+      creatorName: 'Bryan Sombilon',
       createdAt: new Date(),
       subTasks: [],
       comments: []
@@ -258,7 +268,10 @@ export default function App() {
   };
 
   const deleteProjectTask = (id: string) => {
-    setProjectTasks(projectTasks.filter(t => t.id !== id));
+    const task = projectTasks.find(t => t.id === id);
+    if (window.confirm(`Are you sure you want to delete the task "${task?.title}"?`)) {
+      setProjectTasks(projectTasks.filter(t => t.id !== id));
+    }
   };
 
   const handleExport = () => {
@@ -310,15 +323,27 @@ export default function App() {
         activeProjectId={activeProjectId}
         setActiveProjectId={setActiveProjectId}
         projects={projects}
+        projectTasks={projectTasks}
         onAddProject={() => setIsAddingProject(true)}
+        onDeleteProject={deleteProject}
       />
       
       <main className="ml-16 transition-all duration-300 min-h-screen flex flex-col">
         <header className="h-16 border-b border-slate-200 bg-white sticky top-0 z-40 px-8 flex items-center justify-between">
           <div className="flex items-center space-x-6">
             <h1 className="text-xl font-bold text-slate-800 tracking-tight">
-               {activeTab === 'dashboard' ? 'Dashboard Overview' : activeTab === 'calendar' ? 'Calendarization' : activeTab === 'notes' ? 'Journal & Brainstorming' : 'Project Management'}
-             </h1>
+               {activeTab === 'dashboard' ? 'Dashboard Overview' : activeTab === 'calendar' ? 'Calendarization' : activeTab === 'notes' ? 'Journal & Brainstorming' : 'Projects Workspace'}
+            </h1>
+            
+            {activities.filter(a => a.status === 'upcoming').length > 0 && (
+              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-xl">
+                 <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
+                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Next Up:</span>
+                 <span className="text-[11px] font-bold text-slate-700 truncate max-w-[200px]">
+                   {activities.filter(a => a.status === 'upcoming').sort((a, b) => a.date.getTime() - b.date.getTime())[0].title}
+                 </span>
+              </div>
+            )}
           </div>
           <div className="flex items-center space-x-4">
             <div className="flex items-center bg-slate-100 rounded-lg p-1">
@@ -346,7 +371,14 @@ export default function App() {
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.3 }}
             >
-              <Dashboard activities={activities} categoryColors={categoryColors} />
+              <Dashboard 
+                activities={activities} 
+                categoryColors={categoryColors} 
+                projects={projects}
+                projectTasks={projectTasks}
+                setActiveTab={setActiveTab}
+                setActiveProjectId={setActiveProjectId}
+              />
             </motion.div>
           ) : activeTab === 'calendar' ? (
             <motion.div

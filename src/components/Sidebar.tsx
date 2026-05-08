@@ -19,10 +19,12 @@ import {
   Paintbrush,
   Layout,
   FileText,
-  StickyNote
+  StickyNote,
+  Trash2
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { Project } from '@/src/types';
+import { Project, ProjectTask } from '@/src/types';
+import { isSameDay, addDays } from 'date-fns';
 
 interface NavItemProps {
   key?: string | number;
@@ -30,7 +32,9 @@ interface NavItemProps {
   imageUrl?: string;
   label: string;
   isActive?: boolean;
+  isUrgent?: boolean;
   onClick: () => void;
+  onDelete?: (e: React.MouseEvent) => void;
   isExpanded: boolean;
 }
 
@@ -38,38 +42,50 @@ const ICONS_MAP: Record<string, React.ElementType> = {
   Briefcase, Code, Target, Zap, Smartphone, Globe, Sparkles, Award, Rocket, Paintbrush, Layout, FileText
 };
 
-const NavItem = ({ icon: Icon, imageUrl, label, isActive, onClick, isExpanded }: NavItemProps) => {
+const NavItem = ({ icon: Icon, imageUrl, label, isActive, isUrgent, onClick, onDelete, isExpanded }: NavItemProps) => {
   return (
-    <motion.button
+    <motion.div
       layout
       whileTap={{ scale: 0.95 }}
       onClick={onClick}
       className={cn(
-        "group relative flex items-center w-full p-3 my-1 transition-all duration-200",
+        "group relative flex items-center w-full p-3 my-1 transition-all duration-200 cursor-pointer",
         isActive 
           ? "text-indigo-400 border-l-4 border-indigo-400 bg-slate-800/50" 
           : "text-slate-400 hover:bg-slate-800 hover:text-slate-200 border-l-4 border-transparent"
       )}
     >
-      <div className={cn("w-6 h-6 shrink-0 flex items-center justify-center rounded-lg overflow-hidden", isActive ? "text-indigo-400" : "text-slate-400 group-hover:text-slate-200")}>
+      <div className={cn("w-6 h-6 shrink-0 flex items-center justify-center rounded-lg overflow-hidden relative", isActive ? "text-indigo-400" : "text-slate-400 group-hover:text-slate-200")}>
         {imageUrl ? (
           <img src={imageUrl} alt={label} className="w-full h-full object-cover" />
         ) : (
           <Icon size={22} className="shrink-0" />
         )}
+        {isUrgent && (
+          <div className="absolute top-0 right-0 w-2 h-2 bg-rose-500 rounded-full border-2 border-slate-900" />
+        )}
       </div>
       
       <AnimatePresence mode="wait">
         {isExpanded && (
-          <motion.span
+          <motion.div
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -10 }}
             transition={{ duration: 0.2 }}
-            className="ml-4 font-semibold whitespace-nowrap overflow-hidden text-sm"
+            className="ml-4 flex-1 flex items-center justify-between min-w-0"
           >
-            {label}
-          </motion.span>
+            <span className="font-semibold whitespace-nowrap overflow-hidden text-sm truncate pr-2">
+              {label}
+            </span>
+            <div className="flex items-center gap-2">
+               {isUrgent && (
+                 <span className="text-[8px] font-black bg-rose-500/20 text-rose-400 px-1.5 py-0.5 rounded uppercase tracking-widest border border-rose-500/30">
+                   Due
+                 </span>
+               )}
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -78,7 +94,7 @@ const NavItem = ({ icon: Icon, imageUrl, label, isActive, onClick, isExpanded }:
           {label}
         </div>
       )}
-    </motion.button>
+    </motion.div>
   );
 };
 
@@ -123,7 +139,9 @@ interface SidebarProps {
   activeProjectId: string | null;
   setActiveProjectId: (id: string | null) => void;
   projects: Project[];
+  projectTasks: ProjectTask[];
   onAddProject: () => void;
+  onDeleteProject: (id: string) => void;
 }
 
 export default function Sidebar({ 
@@ -132,9 +150,12 @@ export default function Sidebar({
   activeProjectId, 
   setActiveProjectId, 
   projects,
-  onAddProject 
+  projectTasks,
+  onAddProject,
+  onDeleteProject 
 }: SidebarProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const today = new Date();
 
   return (
     <motion.aside
@@ -184,21 +205,18 @@ export default function Sidebar({
             onClick={() => setActiveTab('notes')}
             isExpanded={isHovered}
           />
-          <NavItem 
-            icon={BarChart3} 
-            label="Management" 
-            isActive={activeTab === 'projects' && !activeProjectId} 
-            onClick={() => {
-              setActiveTab('projects');
-              setActiveProjectId(null);
-            }}
-            isExpanded={isHovered}
-          />
         </CollapsibleSection>
 
         <CollapsibleSection title="Projects" isExpanded={isHovered}>
           {projects.map(project => {
             const Icon = ICONS_MAP[project.icon || 'Briefcase'] || Briefcase;
+            const projectTasksList = projectTasks.filter(t => t.projectId === project.id && t.status !== 'completed');
+            const isUrgent = projectTasksList.some(t => {
+              if (!t.dueDate) return false;
+              const diff = t.dueDate.getTime() - today.getTime();
+              return diff < (48 * 60 * 60 * 1000) && diff > - (24 * 60 * 60 * 1000); // within 48h or slightly overdue
+            });
+
             return (
               <NavItem 
                 key={project.id}
@@ -206,9 +224,14 @@ export default function Sidebar({
                 imageUrl={project.coverImage}
                 label={project.name} 
                 isActive={activeTab === 'projects' && activeProjectId === project.id} 
+                isUrgent={isUrgent}
                 onClick={() => {
                   setActiveTab('projects');
                   setActiveProjectId(project.id);
+                }}
+                onDelete={(e) => {
+                  e.stopPropagation();
+                  onDeleteProject(project.id);
                 }}
                 isExpanded={isHovered}
               />
@@ -228,7 +251,9 @@ export default function Sidebar({
         <NavItem 
           icon={Search} 
           label="Search" 
-          onClick={() => {}}
+          onClick={() => {
+            alert("Search feature is currently under development. You can use the search bar in the Journals or Task sections in the meantime.");
+          }}
           isExpanded={isHovered}
         />
         

@@ -13,6 +13,9 @@ import {
   Bold,
   Italic,
   List as ListIcon,
+  ListOrdered,
+  Quote,
+  Code,
   Tag,
   Calendar,
   Clock,
@@ -129,6 +132,9 @@ export default function NotesView({ notes, setNotes }: NotesViewProps) {
   const toggleHeading1 = () => editor?.chain().focus().toggleHeading({ level: 1 }).run();
   const toggleHeading2 = () => editor?.chain().focus().toggleHeading({ level: 2 }).run();
   const toggleBulletList = () => editor?.chain().focus().toggleBulletList().run();
+  const toggleOrderedList = () => editor?.chain().focus().toggleOrderedList().run();
+  const toggleBlockquote = () => editor?.chain().focus().toggleBlockquote().run();
+  const toggleCodeBlock = () => editor?.chain().focus().toggleCodeBlock().run();
 
   return (
     <div className="flex h-[calc(100vh-64px)] bg-slate-50 overflow-hidden font-sans">
@@ -348,6 +354,37 @@ export default function NotesView({ notes, setNotes }: NotesViewProps) {
                 title="Bullet List"
               >
                 <ListIcon size={16} />
+              </button>
+              <button 
+                onClick={toggleOrderedList} 
+                className={cn(
+                  "p-2 rounded-lg transition-all",
+                  editor?.isActive('orderedList') ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:bg-white hover:text-indigo-600"
+                )}
+                title="Ordered List"
+              >
+                <ListOrdered size={16} />
+              </button>
+              <div className="w-px h-4 bg-slate-200 mx-1" />
+              <button 
+                onClick={toggleBlockquote} 
+                className={cn(
+                  "p-2 rounded-lg transition-all",
+                  editor?.isActive('blockquote') ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:bg-white hover:text-indigo-600"
+                )}
+                title="Blockquote"
+              >
+                <Quote size={16} />
+              </button>
+              <button 
+                onClick={toggleCodeBlock} 
+                className={cn(
+                  "p-2 rounded-lg transition-all",
+                  editor?.isActive('codeBlock') ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:bg-white hover:text-indigo-600"
+                )}
+                title="Code Block"
+              >
+                <Code size={16} />
               </button>
             </div>
 
