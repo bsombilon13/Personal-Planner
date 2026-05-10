@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Plus, 
@@ -19,12 +19,25 @@ import {
   Tag,
   Calendar,
   Clock,
-  ChevronDown
+  ChevronDown,
+  Image as ImageIcon,
+  Table as TableIcon,
+  Columns,
+  SquareCode
 } from 'lucide-react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Link from '@tiptap/extension-link';
+import { Image } from '@tiptap/extension-image';
+import { Table } from '@tiptap/extension-table';
+import { TableRow } from '@tiptap/extension-table-row';
+import { TableHeader } from '@tiptap/extension-table-header';
+import { TableCell } from '@tiptap/extension-table-cell';
+import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight';
+import { common, createLowlight } from 'lowlight';
+
+const lowlight = createLowlight(common);
 import { GlobalNote } from '@/src/types';
 import { cn } from '@/src/lib/utils';
 import { format } from 'date-fns';
@@ -41,17 +54,46 @@ export default function NotesView({ notes, setNotes }: NotesViewProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string | 'All'>('All');
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [showTableMenu, setShowTableMenu] = useState(false);
+  const tableMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (tableMenuRef.current && !tableMenuRef.current.contains(event.target as Node)) {
+        setShowTableMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const activeNote = notes.find(n => n.id === activeNoteId);
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({
+        codeBlock: false, // Disable default code block to use lowlight
+      }),
       Placeholder.configure({
         placeholder: 'Start brainstorming, taking meeting notes, or journaling here...',
       }),
       Link.configure({
         openOnClick: false,
+      }),
+      Image.configure({
+        allowBase64: true,
+        HTMLAttributes: {
+          class: 'rounded-2xl border border-slate-100 max-w-full h-auto my-6',
+        },
+      }),
+      Table.configure({
+        resizable: true,
+      }),
+      TableRow,
+      TableHeader,
+      TableCell,
+      CodeBlockLowlight.configure({
+        lowlight,
       }),
     ],
     content: activeNote?.content || '',
@@ -135,6 +177,25 @@ export default function NotesView({ notes, setNotes }: NotesViewProps) {
   const toggleOrderedList = () => editor?.chain().focus().toggleOrderedList().run();
   const toggleBlockquote = () => editor?.chain().focus().toggleBlockquote().run();
   const toggleCodeBlock = () => editor?.chain().focus().toggleCodeBlock().run();
+
+  const addImage = () => {
+    const url = window.prompt('Enter image URL');
+    if (url) {
+      editor?.chain().focus().setImage({ src: url }).run();
+    }
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        editor?.chain().focus().setImage({ src: result }).run();
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   return (
     <div className="flex h-[calc(100vh-64px)] bg-slate-50 overflow-hidden font-sans">
@@ -386,6 +447,92 @@ export default function NotesView({ notes, setNotes }: NotesViewProps) {
               >
                 <Code size={16} />
               </button>
+              <div className="w-px h-4 bg-slate-200 mx-1" />
+              
+              <div className="relative group">
+                <input
+                  type="file"
+                  id="image-upload"
+                  className="hidden"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                />
+                <button 
+                  onClick={() => document.getElementById('image-upload')?.click()}
+                  className="p-2 rounded-lg text-slate-400 hover:bg-white hover:text-indigo-600 transition-all"
+                  title="Upload Image"
+                >
+                  <ImageIcon size={16} />
+                </button>
+              </div>
+
+              <div className="relative" ref={tableMenuRef}>
+                <button 
+                  onClick={() => setShowTableMenu(!showTableMenu)}
+                  className={cn(
+                    "p-2 rounded-lg transition-all",
+                    editor?.isActive('table') ? "bg-white shadow-sm text-indigo-600" : "text-slate-400 hover:bg-white hover:text-indigo-600"
+                  )}
+                  title="Table"
+                >
+                  <TableIcon size={16} />
+                </button>
+                
+                {showTableMenu && (
+                  <div className="absolute top-full left-0 mt-1 bg-white border border-slate-100 rounded-xl shadow-xl z-50 p-2 min-w-[200px] flex flex-col gap-1">
+                    <button 
+                      onClick={() => {
+                        editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+                        setShowTableMenu(false);
+                      }}
+                      className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 hover:text-indigo-600 rounded-lg transition-all text-left flex items-center justify-between"
+                    >
+                      Insert 3x3 Table
+                      <Plus size={12} />
+                    </button>
+                    <div className="h-px bg-slate-100 my-1" />
+                    <button 
+                      disabled={!editor?.isActive('table')}
+                      onClick={() => editor?.chain().focus().addColumnBefore().run()}
+                      className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 hover:text-indigo-600 disabled:opacity-30 rounded-lg transition-all text-left"
+                    >
+                      Add Column before
+                    </button>
+                    <button 
+                      disabled={!editor?.isActive('table')}
+                      onClick={() => editor?.chain().focus().addColumnAfter().run()}
+                      className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 hover:text-indigo-600 disabled:opacity-30 rounded-lg transition-all text-left"
+                    >
+                      Add Column after
+                    </button>
+                    <button 
+                      disabled={!editor?.isActive('table')}
+                      onClick={() => editor?.chain().focus().addRowBefore().run()}
+                      className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 hover:text-indigo-600 disabled:opacity-30 rounded-lg transition-all text-left"
+                    >
+                      Add Row before
+                    </button>
+                    <button 
+                      disabled={!editor?.isActive('table')}
+                      onClick={() => editor?.chain().focus().addRowAfter().run()}
+                      className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 hover:text-indigo-600 disabled:opacity-30 rounded-lg transition-all text-left"
+                    >
+                      Add Row after
+                    </button>
+                    <div className="h-px bg-slate-100 my-1" />
+                    <button 
+                      disabled={!editor?.isActive('table')}
+                      onClick={() => {
+                        editor?.chain().focus().deleteTable().run();
+                        setShowTableMenu(false);
+                      }}
+                      className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-rose-500 hover:bg-rose-50 disabled:opacity-30 rounded-lg transition-all text-left"
+                    >
+                      Delete Table
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className={cn(

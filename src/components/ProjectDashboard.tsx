@@ -22,6 +22,8 @@ import {
   ArrowUp,
   ArrowDown,
   Share2,
+  Table as TableIcon,
+  Columns as KanbanIcon,
   BookOpen,
   FileText,
   File,
@@ -119,6 +121,7 @@ export default function ProjectDashboard({
   onDeleteTask
 }: ProjectDashboardProps) {
   const [activeProjectTab, setActiveProjectTab] = useState<'dashboard' | 'assets' | 'notes' | 'settings'>('dashboard');
+  const [taskViewMode, setTaskViewMode] = useState<'kanban' | 'table'>('kanban');
   
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDesc, setNewProjectDesc] = useState('');
@@ -172,6 +175,7 @@ export default function ProjectDashboard({
   const [viewingTask, setViewingTask] = useState<ProjectTask | null>(null);
 
   const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskDescription, setNewTaskDescription] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const [newTaskDueDate, setNewTaskDueDate] = useState('');
   const [newTaskAssignee, setNewTaskAssignee] = useState('Bryan Sombilon');
@@ -207,6 +211,10 @@ export default function ProjectDashboard({
 
   const activeProject = projects.find(p => p.id === activeProjectId);
   
+  const allAssignees = useMemo(() => 
+    Array.from(new Set(tasks.map(t => t.assignee).filter(Boolean))) as string[]
+  , [tasks]);
+
   const assignees = Array.from(new Set(tasks.filter(t => t.projectId === activeProjectId).map(t => t.assignee).filter(Boolean))) as string[];
   const hasUnassigned = tasks.filter(t => t.projectId === activeProjectId).some(t => !t.assignee);
 
@@ -403,12 +411,14 @@ export default function ProjectDashboard({
       onAddTask({
         projectId: finalProjectId,
         title: newTaskTitle,
+        description: newTaskDescription.trim() || undefined,
         status: newTaskStatus,
         priority: newTaskPriority,
         dueDate: newTaskDueDate ? new Date(newTaskDueDate) : undefined,
-        assignee: newTaskAssignee.trim() || undefined,
+        assignee: (newTaskAssignee.trim() && newTaskAssignee !== 'Unassigned') ? newTaskAssignee.trim() : undefined,
       });
       setNewTaskTitle('');
+      setNewTaskDescription('');
       setNewTaskDueDate('');
       setNewTaskAssignee('Bryan Sombilon');
       setNewTaskPriority('medium');
@@ -735,56 +745,233 @@ export default function ProjectDashboard({
                          'Manage project configuration and presence'}
                       </p>
                     </div>
+
+                    {activeProjectTab === 'dashboard' && (
+                      <div className="flex bg-slate-100 p-1 rounded-xl items-center">
+                        <button 
+                          onClick={() => setTaskViewMode('kanban')}
+                          className={cn(
+                            "px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2",
+                            taskViewMode === 'kanban' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                          )}
+                        >
+                          <KanbanIcon size={14} />
+                          Kanban
+                        </button>
+                        <button 
+                          onClick={() => setTaskViewMode('table')}
+                          className={cn(
+                            "px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2",
+                            taskViewMode === 'table' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                          )}
+                        >
+                          <TableIcon size={14} />
+                          Table
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <AnimatePresence mode="wait">
                     {activeProjectTab === 'dashboard' ? (
                       <motion.div
-                        key="tasks"
+                        key={taskViewMode}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
                       >
-                        <DndContext 
-                          sensors={sensors}
-                          collisionDetection={closestCenter}
-                          onDragStart={handleDragStart}
-                          onDragOver={handleDragOver}
-                          onDragEnd={handleDragEnd}
-                        >
-                          <div className="flex flex-col gap-6 pb-10">
-                            {TASK_STATUSES.map((status, index) => (
-                              <motion.div
-                                key={status}
-                                className="w-full h-full min-h-[120px]"
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 0.1 + index * 0.1 }}
-                              >
-                                <TaskColumn 
-                                  status={status} 
-                                  projectTasks={projectTasks} 
-                                  onUpdateTask={onUpdateTask} 
-                                  onDeleteTask={onDeleteTask} 
-                                  setViewingTask={setViewingTask}
-                                  setIsAddingTask={setIsAddingTask}
-                                  projectColor={activeProject.color}
-                                />
-                              </motion.div>
-                            ))}
+                        {taskViewMode === 'kanban' ? (
+                          <DndContext 
+                            sensors={sensors}
+                            collisionDetection={closestCenter}
+                            onDragStart={handleDragStart}
+                            onDragOver={handleDragOver}
+                            onDragEnd={handleDragEnd}
+                          >
+                            <div className="flex flex-col gap-6 pb-10">
+                              {TASK_STATUSES.map((status, index) => (
+                                <motion.div
+                                  key={status}
+                                  className="w-full h-full min-h-[120px]"
+                                  initial={{ opacity: 0, y: 20 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  transition={{ delay: 0.1 + index * 0.1 }}
+                                >
+                                  <TaskColumn 
+                                    status={status} 
+                                    projectTasks={projectTasks} 
+                                    onUpdateTask={onUpdateTask} 
+                                    onDeleteTask={onDeleteTask} 
+                                    setViewingTask={setViewingTask}
+                                    setIsAddingTask={setIsAddingTask}
+                                    projectColor={activeProject.color}
+                                  />
+                                </motion.div>
+                              ))}
+                            </div>
+                            <DragOverlay>
+                               {activeDraggingTask ? (
+                                 <TaskCard 
+                                   task={activeDraggingTask} 
+                                   onUpdate={onUpdateTask} 
+                                   onDelete={onDeleteTask}
+                                   onClick={() => {}}
+                                   projectColor={activeProject.color}
+                                   isOverlay
+                                 />
+                               ) : null}
+                            </DragOverlay>
+                          </DndContext>
+                        ) : (
+                          <div className="bg-white rounded-3xl border border-slate-100 shadow-xl shadow-slate-200/50 overflow-hidden mb-10">
+                            <div className="overflow-x-auto no-scrollbar">
+                              <table className="w-full text-left border-collapse">
+                                <thead>
+                                  <tr className="bg-slate-50/50">
+                                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100 italic w-12 text-center text-slate-300">ID</th>
+                                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">Vital Task</th>
+                                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">Status</th>
+                                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">Sub-Units</th>
+                                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">Deadline</th>
+                                    <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100 text-right">Actions</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-50">
+                                  {projectTasks.map((task, idx) => (
+                                    <React.Fragment key={task.id}>
+                                      <tr className="hover:bg-slate-50/30 transition-colors group">
+                                        <td className="px-8 py-6 text-center">
+                                          <span className="text-[10px] font-black text-slate-200 uppercase tracking-tighter">
+                                            {(idx + 1).toString().padStart(2, '0')}
+                                          </span>
+                                        </td>
+                                        <td className="px-8 py-6">
+                                          <div className="flex items-center gap-3">
+                                            <div 
+                                              className={cn("w-2 h-2 rounded-full", 
+                                                task.priority === 'high' ? "bg-rose-500" : task.priority === 'medium' ? "bg-amber-500" : "bg-emerald-500"
+                                              )} 
+                                            />
+                                            <button 
+                                              onClick={() => setViewingTask(task)}
+                                              className="text-sm font-black text-slate-900 group-hover:text-indigo-600 transition-colors text-left"
+                                            >
+                                              {task.title}
+                                            </button>
+                                          </div>
+                                        </td>
+                                        <td className="px-8 py-6">
+                                          <div className="flex items-center gap-2">
+                                            <select 
+                                              value={task.status}
+                                              onChange={(e) => updateTaskStatus(task, e.target.value as any)}
+                                              className={cn(
+                                                "text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border-0 focus:ring-0 cursor-pointer shadow-sm",
+                                                task.status === 'completed' ? "bg-emerald-50 text-emerald-600" :
+                                                task.status === 'in-progress' ? "bg-indigo-50 text-indigo-600" :
+                                                task.status === 'under-review' ? "bg-violet-50 text-violet-600" :
+                                                "bg-slate-100 text-slate-500"
+                                              )}
+                                            >
+                                              {TASK_STATUSES.map(s => (
+                                                <option key={s} value={s}>{s.replace('-', ' ')}</option>
+                                              ))}
+                                            </select>
+                                          </div>
+                                        </td>
+                                        <td className="px-8 py-6">
+                                          <div className="flex items-center gap-2">
+                                            <div className="flex -space-x-1">
+                                              {task.subTasks.map((st, i) => (
+                                                <div 
+                                                  key={st.id} 
+                                                  className={cn(
+                                                    "w-2.5 h-2.5 rounded-full border border-white",
+                                                    st.isCompleted ? "bg-emerald-500 shadow-emerald-200" : "bg-slate-200 shadow-slate-100"
+                                                  )} 
+                                                  title={st.title}
+                                                />
+                                              ))}
+                                            </div>
+                                            <span className="text-[10px] font-bold text-slate-400 ml-1">
+                                              {task.subTasks.filter(s => s.isCompleted).length}/{task.subTasks.length}
+                                            </span>
+                                          </div>
+                                        </td>
+                                        <td className="px-8 py-6">
+                                          <div className="flex flex-col">
+                                            <div className="flex items-center gap-1.5 text-xs font-black text-slate-700">
+                                              <CalendarIcon size={12} className="text-slate-300" />
+                                              {task.dueDate ? format(task.dueDate, 'MMM dd, yyyy') : 'No date'}
+                                            </div>
+                                            {task.dueDate && (
+                                              <span className={cn(
+                                                "text-[9px] font-black uppercase tracking-widest mt-1",
+                                                new Date(task.dueDate) < new Date() && task.status !== 'completed' ? "text-rose-500" : "text-slate-300"
+                                              )}>
+                                                {new Date(task.dueDate) < new Date() && task.status !== 'completed' ? 'Overdue' : 'Synchronized'}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </td>
+                                        <td className="px-8 py-6 text-right">
+                                          <div className="flex justify-end gap-2">
+                                            <button 
+                                              onClick={() => setViewingTask(task)}
+                                              className="p-2 text-slate-400 hover:text-indigo-600 transition-colors"
+                                            >
+                                              <Eye size={16} />
+                                            </button>
+                                            <button 
+                                              onClick={() => onDeleteTask(task.id)}
+                                              className="p-2 text-slate-400 hover:text-rose-500 transition-colors"
+                                            >
+                                              <Trash2 size={16} />
+                                            </button>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                      {/* Subtasks Row (Optional: can be shown when expanded) */}
+                                      {task.subTasks.length > 0 && (
+                                        <tr className="bg-slate-50/20">
+                                          <td colSpan={6} className="px-8 py-2">
+                                            <div className="flex flex-wrap gap-x-6 gap-y-2 ml-10 mb-2">
+                                              {task.subTasks.map(st => (
+                                                <div key={st.id} className="flex items-center gap-2">
+                                                  <button onClick={() => toggleSubTask(task, st.id)}>
+                                                    {st.isCompleted ? (
+                                                      <CheckCircle2 size={12} className="text-emerald-500" />
+                                                    ) : (
+                                                      <Circle size={12} className="text-slate-300" />
+                                                    )}
+                                                  </button>
+                                                  <span className={cn(
+                                                    "text-[10px] font-medium",
+                                                    st.isCompleted ? "text-slate-400 line-through" : "text-slate-600"
+                                                  )}>
+                                                    {st.title}
+                                                  </span>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      )}
+                                    </React.Fragment>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                            {projectTasks.length === 0 && (
+                              <div className="p-20 text-center">
+                                <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 text-slate-200">
+                                  <TableIcon size={32} />
+                                </div>
+                                <h3 className="text-lg font-black text-slate-900 tracking-tight mb-2">No items in registry</h3>
+                                <p className="text-sm text-slate-400 font-medium">Reset filters or create new tasks to populate this unit.</p>
+                              </div>
+                            )}
                           </div>
-                          <DragOverlay>
-                             {activeDraggingTask ? (
-                               <TaskCard 
-                                 task={activeDraggingTask} 
-                                 onUpdate={onUpdateTask} 
-                                 onDelete={onDeleteTask}
-                                 onClick={() => {}}
-                                 projectColor={activeProject.color}
-                                 isOverlay
-                               />
-                             ) : null}
-                          </DragOverlay>
-                        </DndContext>
+                        )}
                       </motion.div>
                     ) : activeProjectTab === 'assets' ? (
                       <AssetsView 
@@ -1133,18 +1320,50 @@ export default function ProjectDashboard({
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Project</label>
-                  <select 
-                    value={newTaskProjectId || activeProjectId || ''}
-                    onChange={e => setNewTaskProjectId(e.target.value)}
-                    required
-                    className="w-full bg-slate-50 border-0 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-indigo-500 font-bold transition-all appearance-none"
-                  >
-                    <option value="" disabled>Select a project</option>
-                    {projects.map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Description</label>
+                  <textarea 
+                    value={newTaskDescription}
+                    onChange={e => setNewTaskDescription(e.target.value)}
+                    placeholder="Provide more context for this task..."
+                    rows={3}
+                    className="w-full bg-slate-50 border-0 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-indigo-500 font-medium transition-all resize-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Project</label>
+                    <select 
+                      value={newTaskProjectId || activeProjectId || ''}
+                      onChange={e => setNewTaskProjectId(e.target.value)}
+                      required
+                      className="w-full bg-slate-50 border-0 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-indigo-500 font-bold transition-all appearance-none"
+                    >
+                      <option value="" disabled>Select a project</option>
+                      {projects.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Assignee</label>
+                    <div className="relative">
+                      <select 
+                        value={newTaskAssignee}
+                        onChange={e => setNewTaskAssignee(e.target.value)}
+                        className="w-full bg-slate-50 border-0 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-indigo-500 font-bold transition-all appearance-none"
+                      >
+                        <option value="Bryan Sombilon">Bryan Sombilon (You)</option>
+                        {allAssignees.filter(a => a !== 'Bryan Sombilon' && a !== 'Unassigned').map(a => (
+                          <option key={a} value={a}>{a}</option>
+                        ))}
+                        <option value="Unassigned">Unassigned</option>
+                      </select>
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <User size={16} />
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-6">
@@ -1310,7 +1529,7 @@ function TaskDetailModal({ task, projects, onUpdate, onClose }: {
   onUpdate: (task: ProjectTask) => void,
   onClose: () => void
 }) {
-  const [activeTab, setActiveTab] = useState<'details' | 'comments'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'subtasks' | 'comments'>('details');
   const [commentText, setCommentText] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(task.title);
@@ -1423,6 +1642,16 @@ function TaskDetailModal({ task, projects, onUpdate, onClose }: {
                   Description
                 </button>
                 <button 
+                  onClick={() => setActiveTab('subtasks')}
+                  className={cn(
+                    "flex-1 py-4 text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2",
+                    activeTab === 'subtasks' ? "text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/30" : "text-slate-400 hover:text-slate-600"
+                  )}
+                >
+                  Subtasks
+                  <span className="bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded text-[10px]">{(task.subTasks || []).length}</span>
+                </button>
+                <button 
                   onClick={() => setActiveTab('comments')}
                   className={cn(
                     "flex-1 py-4 text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2",
@@ -1500,6 +1729,93 @@ function TaskDetailModal({ task, projects, onUpdate, onClose }: {
                           )}
                         </div>
                      </div>
+                  </div>
+                ) : activeTab === 'subtasks' ? (
+                  <div className="flex flex-col h-full">
+                    <div className="flex-1 space-y-3">
+                      {(task.subTasks || []).length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-20 text-center">
+                          <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 text-slate-200">
+                            <ListOrdered size={24} />
+                          </div>
+                          <p className="text-sm font-bold text-slate-900">No subtasks yet</p>
+                          <p className="text-xs text-slate-400 mt-1 uppercase tracking-widest">Break down this task into smaller steps.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {task.subTasks.map((st, i) => (
+                            <motion.div 
+                              key={st.id} 
+                              initial={{ opacity: 0, x: -10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: i * 0.05 }}
+                              className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl group transition-all hover:bg-slate-100/50"
+                            >
+                              <button 
+                                onClick={() => {
+                                  const updatedSubTasks = task.subTasks.map(sub => 
+                                    sub.id === st.id ? { ...sub, isCompleted: !sub.isCompleted } : sub
+                                  );
+                                  onUpdate({ ...task, subTasks: updatedSubTasks });
+                                }}
+                                className={cn(
+                                  "w-6 h-6 rounded-lg flex items-center justify-center transition-all border-2",
+                                  st.isCompleted 
+                                    ? "bg-indigo-600 border-indigo-600 text-white" 
+                                    : "bg-white border-slate-200 text-transparent"
+                                )}
+                              >
+                                <CheckCircle2 size={14} strokeWidth={3} />
+                              </button>
+                              <span className={cn(
+                                "flex-1 text-sm font-bold transition-all",
+                                st.isCompleted ? "text-slate-400 line-through" : "text-slate-700"
+                              )}>
+                                {st.title}
+                              </span>
+                              <button 
+                                onClick={() => {
+                                  onUpdate({ ...task, subTasks: task.subTasks.filter(sub => sub.id !== st.id) });
+                                }}
+                                className="opacity-0 group-hover:opacity-100 p-2 text-slate-400 hover:text-red-500 transition-all"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </motion.div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <form 
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const input = (e.target as any).subtaskTitle;
+                        if (input.value.trim()) {
+                          const newSubTask: SubTask = {
+                            id: Math.random().toString(36).substr(2, 9),
+                            title: input.value.trim(),
+                            isCompleted: false
+                          };
+                          onUpdate({ ...task, subTasks: [...(task.subTasks || []), newSubTask] });
+                          input.value = '';
+                        }
+                      }}
+                      className="sticky bottom-0 bg-white pt-6"
+                    >
+                      <div className="relative">
+                        <input 
+                          name="subtaskTitle"
+                          placeholder="Add a subtask..."
+                          className="w-full bg-slate-100 border-0 rounded-2xl px-5 py-4 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500 transition-all pr-12"
+                        />
+                        <button 
+                          type="submit"
+                          className="absolute right-2 top-2 p-2 bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-all"
+                        >
+                          <Plus size={18} />
+                        </button>
+                      </div>
+                    </form>
                   </div>
                 ) : (
                   <div className="flex flex-col h-full">
@@ -1716,20 +2032,8 @@ function TaskCard({ task, onUpdate, onDelete, onClick, projectColor, isOverlay }
     pointerEvents: isOverlay ? 'none' : 'auto' as any,
   };
 
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [newSubTask, setNewSubTask] = useState('');
-
   const completedSubTasks = task.subTasks.filter(st => st.isCompleted).length;
   const progress = task.subTasks.length > 0 ? (completedSubTasks / task.subTasks.length) * 100 : 0;
-
-  const handleCreateSubTask = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newSubTask.trim()) {
-      const st: SubTask = { id: Math.random().toString(36).substr(2, 9), title: newSubTask, isCompleted: false };
-      onUpdate({ ...task, subTasks: [...task.subTasks, st] });
-      setNewSubTask('');
-    }
-  };
 
   return (
     <motion.div 
