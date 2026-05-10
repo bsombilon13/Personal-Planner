@@ -52,6 +52,8 @@ export interface ProjectTask {
   createdAt: Date;
   subTasks: SubTask[];
   comments: Comment[];
+  attachments: ProjectAsset[];
+  order: number;
 }
 
 export interface ProjectAsset {

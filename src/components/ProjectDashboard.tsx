@@ -99,7 +99,7 @@ interface ProjectDashboardProps {
   onAddProject: (name: string, description: string, color?: string, icon?: string, category?: string, coverImage?: string) => void;
   onDeleteProject: (id: string) => void;
   onUpdateProject: (project: Project) => void;
-  onAddTask: (task: Omit<ProjectTask, 'id' | 'subTasks' | 'comments' | 'createdAt' | 'creatorName'>) => void;
+  onAddTask: (task: Omit<ProjectTask, 'id' | 'subTasks' | 'comments' | 'attachments' | 'createdAt' | 'creatorName' | 'order'>) => void;
   onUpdateTask: (task: ProjectTask) => void;
   onDeleteTask: (id: string) => void;
 }
@@ -191,7 +191,7 @@ export default function ProjectDashboard({
   const [tempCroppedImage, setTempCroppedImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [sortBy, setSortBy] = useState<'dueDate' | 'priority' | 'title' | 'createdAt'>('dueDate');
+  const [sortBy, setSortBy] = useState<'dueDate' | 'priority' | 'title' | 'createdAt' | 'manual'>('manual');
   const [sortOrientation, setSortOrientation] = useState<'asc' | 'desc'>('asc');
   
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
@@ -225,7 +225,9 @@ export default function ProjectDashboard({
     .filter(t => filterAssignee.length === 0 || (t.assignee ? filterAssignee.includes(t.assignee) : filterAssignee.includes('unassigned')))
     .sort((a, b) => {
       let comparison = 0;
-      if (sortBy === 'dueDate') {
+      if (sortBy === 'manual') {
+        comparison = (a.order ?? 0) - (b.order ?? 0);
+      } else if (sortBy === 'dueDate') {
         if (!a.dueDate && !b.dueDate) comparison = 0;
         else if (!a.dueDate) comparison = 1;
         else if (!b.dueDate) comparison = -1;
@@ -335,8 +337,8 @@ export default function ProjectDashboard({
     const activeId = active.id;
     const overId = over.id;
 
-    const task = tasks.find(t => t.id === activeId);
-    if (!task) return;
+    const activeTask = tasks.find(t => t.id === activeId);
+    if (!activeTask) return;
 
     let overStatus: ProjectTaskStatus | undefined;
     
@@ -349,8 +351,27 @@ export default function ProjectDashboard({
       }
     }
 
-    if (overStatus && task.status !== overStatus) {
-      onUpdateTask({ ...task, status: overStatus });
+    if (overStatus) {
+      if (activeTask.status !== overStatus) {
+        // Change status and put it at the end of the new column
+        const tasksInNewStatus = tasks.filter(t => t.projectId === activeProjectId && t.status === overStatus);
+        onUpdateTask({ ...activeTask, status: overStatus, order: tasksInNewStatus.length });
+      } else if (activeId !== overId) {
+        // Reorder within the same column
+        const columnTasks = projectTasks.filter(t => t.status === overStatus);
+        const oldIndex = columnTasks.findIndex(t => t.id === activeId);
+        const newIndex = columnTasks.findIndex(t => t.id === overId);
+
+        if (oldIndex !== -1 && newIndex !== -1) {
+          const newOrderedTasks = arrayMove(columnTasks, oldIndex, newIndex);
+          // Update all tasks in that column with their new order
+          newOrderedTasks.forEach((t, index) => {
+             if (t.order !== index) {
+               onUpdateTask({ ...t, order: index });
+             }
+          });
+        }
+      }
     }
   };
 
@@ -471,6 +492,7 @@ export default function ProjectDashboard({
               onChange={(e) => setSortBy(e.target.value as any)}
               className="bg-transparent border-0 focus:ring-0 text-xs font-bold text-slate-600 p-0 mr-2"
             >
+              <option value="manual">Manual (Drag)</option>
               <option value="dueDate">Due Date</option>
               <option value="createdAt">Creation Date</option>
               <option value="priority">Priority</option>
@@ -652,10 +674,21 @@ export default function ProjectDashboard({
                         color: '#f59e0b'
                       },
                       { 
-                        label: 'Upcoming Deadlines', 
-                        value: projectTasks.filter(t => t.dueDate && t.dueDate > new Date() && t.status !== 'completed').length,
-                        sub: 'Next 7 days',
+                        label: 'Overdue Mission', 
+                        value: projectTasks.filter(t => t.dueDate && t.dueDate < new Date() && t.status !== 'completed').length,
+                        sub: 'Needs immediate action',
                         color: '#ef4444'
+                      },
+                      { 
+                        label: 'Upcoming Deadlines', 
+                        value: projectTasks.filter(t => {
+                          if (!t.dueDate || t.status === 'completed') return false;
+                          const inSevenDays = new Date();
+                          inSevenDays.setDate(inSevenDays.getDate() + 7);
+                          return t.dueDate > new Date() && t.dueDate <= inSevenDays;
+                        }).length,
+                        sub: 'Next 7 days',
+                        color: '#f59e0b'
                       },
                       { 
                         label: 'Contributors', 
@@ -1529,7 +1562,7 @@ function TaskDetailModal({ task, projects, onUpdate, onClose }: {
   onUpdate: (task: ProjectTask) => void,
   onClose: () => void
 }) {
-  const [activeTab, setActiveTab] = useState<'details' | 'subtasks' | 'comments'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'subtasks' | 'comments' | 'attachments'>('details');
   const [commentText, setCommentText] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(task.title);
@@ -1538,6 +1571,57 @@ function TaskDetailModal({ task, projects, onUpdate, onClose }: {
   const [editAssignee, setEditAssignee] = useState(task.assignee || '');
   const [editPriority, setEditPriority] = useState(task.priority);
   const [editStatus, setEditStatus] = useState(task.status);
+
+  const attachmentsFileInputRef = useRef<HTMLInputElement>(null);
+  const [attachmentLinkUrl, setAttachmentLinkUrl] = useState('');
+  const [attachmentLinkName, setAttachmentLinkName] = useState('');
+  const [isAddingLink, setIsAddingLink] = useState(false);
+
+  const handleAddAttachment = (asset: ProjectAsset) => {
+    onUpdate({ ...task, attachments: [...(task.attachments || []), asset] });
+  };
+
+  const handleRemoveAttachment = (attachmentId: string) => {
+    onUpdate({ ...task, attachments: (task.attachments || []).filter(a => a.id !== attachmentId) });
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        const newAttachment: ProjectAsset = {
+          id: Math.random().toString(36).substr(2, 9),
+          name: file.name,
+          url: result,
+          type: 'file',
+          fileType: file.type,
+          size: file.size,
+          createdAt: new Date()
+        };
+        handleAddAttachment(newAttachment);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleAddLink = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (attachmentLinkUrl.trim()) {
+      const newAttachment: ProjectAsset = {
+        id: Math.random().toString(36).substr(2, 9),
+        name: attachmentLinkName.trim() || attachmentLinkUrl.trim(),
+        url: attachmentLinkUrl.trim().startsWith('http') ? attachmentLinkUrl.trim() : `https://${attachmentLinkUrl.trim()}`,
+        type: 'link',
+        createdAt: new Date()
+      };
+      handleAddAttachment(newAttachment);
+      setAttachmentLinkUrl('');
+      setAttachmentLinkName('');
+      setIsAddingLink(false);
+    }
+  };
 
   const handleAddComment = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1660,6 +1744,16 @@ function TaskDetailModal({ task, projects, onUpdate, onClose }: {
                 >
                   Comments
                   <span className="bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded text-[10px]">{(task.comments || []).length}</span>
+                </button>
+                <button 
+                  onClick={() => setActiveTab('attachments')}
+                  className={cn(
+                    "flex-1 py-4 text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2",
+                    activeTab === 'attachments' ? "text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/30" : "text-slate-400 hover:text-slate-600"
+                  )}
+                >
+                  Assets
+                  <span className="bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded text-[10px]">{(task.attachments || []).length}</span>
                 </button>
              </div>
 
@@ -1817,7 +1911,7 @@ function TaskDetailModal({ task, projects, onUpdate, onClose }: {
                       </div>
                     </form>
                   </div>
-                ) : (
+                ) : activeTab === 'comments' ? (
                   <div className="flex flex-col h-full">
                      <div className="flex-1 space-y-6">
                         {(task.comments || []).length === 0 ? (
@@ -1872,6 +1966,144 @@ function TaskDetailModal({ task, projects, onUpdate, onClose }: {
                           </button>
                         </div>
                      </form>
+                  </div>
+                ) : (
+                  <div className="flex flex-col h-full">
+                    <div className="flex items-center justify-between mb-6">
+                       <div>
+                         <h3 className="text-sm font-black text-slate-900 tracking-tight">Task Assets</h3>
+                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Manage files and reference links</p>
+                       </div>
+                       <div className="flex items-center gap-2">
+                         <button 
+                           onClick={() => setIsAddingLink(!isAddingLink)}
+                           className={cn(
+                             "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2",
+                             isAddingLink ? "bg-slate-900 text-white" : "bg-white border border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-100"
+                           )}
+                         >
+                           <Link size={14} />
+                           Add Link
+                         </button>
+                         <button 
+                           onClick={() => attachmentsFileInputRef.current?.click()}
+                           className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+                         >
+                           <Upload size={14} />
+                           Upload File
+                         </button>
+                         <input 
+                           type="file"
+                           ref={attachmentsFileInputRef}
+                           onChange={handleFileUpload}
+                           className="hidden"
+                         />
+                       </div>
+                    </div>
+
+                    <AnimatePresence>
+                      {isAddingLink && (
+                        <motion.form 
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          onSubmit={handleAddLink}
+                          className="bg-slate-50 p-6 rounded-2xl border border-slate-100 mb-6 space-y-4 overflow-hidden"
+                        >
+                           <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Resource Name</label>
+                                <input 
+                                  value={attachmentLinkName}
+                                  onChange={e => setAttachmentLinkName(e.target.value)}
+                                  placeholder="e.g., Design Specs"
+                                  className="w-full bg-white border-0 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-indigo-500"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">URL</label>
+                                <input 
+                                  required
+                                  value={attachmentLinkUrl}
+                                  onChange={e => setAttachmentLinkUrl(e.target.value)}
+                                  placeholder="figma.com/..."
+                                  className="w-full bg-white border-0 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-indigo-500"
+                                />
+                              </div>
+                           </div>
+                           <div className="flex justify-end gap-3">
+                              <button 
+                                type="button"
+                                onClick={() => setIsAddingLink(false)}
+                                className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600"
+                              >
+                                Cancel
+                              </button>
+                              <button 
+                                type="submit"
+                                className="px-5 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg"
+                              >
+                                Attach Link
+                              </button>
+                           </div>
+                        </motion.form>
+                      )}
+                    </AnimatePresence>
+
+                    <div className="flex-1 space-y-3">
+                       {(task.attachments || []).length === 0 ? (
+                         <div className="flex flex-col items-center justify-center py-20 text-center bg-slate-50/50 rounded-3xl border-2 border-dashed border-slate-100">
+                            <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mb-4 text-slate-200 shadow-sm">
+                              <File size={24} />
+                            </div>
+                            <p className="text-sm font-bold text-slate-900">No attachments found</p>
+                            <p className="text-xs text-slate-400 mt-1 uppercase tracking-widest">Share relevant files or links for this mission.</p>
+                         </div>
+                       ) : (
+                         <div className="grid grid-cols-2 gap-4">
+                            {task.attachments.map(asset => (
+                              <div key={asset.id} className="p-4 bg-white border border-slate-200 rounded-2xl flex items-center gap-4 group hover:border-indigo-100 hover:shadow-sm transition-all">
+                                 <div className={cn(
+                                   "w-12 h-12 rounded-xl flex items-center justify-center shrink-0",
+                                   asset.type === 'link' ? "bg-indigo-50 text-indigo-600" : "bg-slate-100 text-slate-400"
+                                 )}>
+                                   {asset.type === 'link' ? <Link size={20} /> : <FileText size={20} />}
+                                 </div>
+                                 <div className="flex-1 min-w-0">
+                                   <p className="text-xs font-bold text-slate-900 truncate pr-4">{asset.name}</p>
+                                   <div className="flex items-center gap-2 mt-0.5">
+                                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                        {asset.type === 'link' ? 'Reference Link' : asset.fileType?.split('/')[1] || 'File'}
+                                      </span>
+                                      {asset.size && (
+                                        <>
+                                          <span className="w-0.5 h-0.5 rounded-full bg-slate-300" />
+                                          <span className="text-[9px] font-black text-slate-400">{(asset.size / 1024 / 1024).toFixed(2)} MB</span>
+                                        </>
+                                      )}
+                                   </div>
+                                 </div>
+                                 <div className="flex items-center gap-1">
+                                   <a 
+                                     href={asset.url} 
+                                     target="_blank" 
+                                     rel="noopener noreferrer"
+                                     className="p-2 hover:bg-indigo-50 rounded-lg text-slate-400 hover:text-indigo-600 transition-all opacity-0 group-hover:opacity-100"
+                                   >
+                                     <ExternalLink size={16} />
+                                   </a>
+                                   <button 
+                                     onClick={() => handleRemoveAttachment(asset.id)}
+                                     className="p-2 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100"
+                                   >
+                                     <Trash2 size={16} />
+                                   </button>
+                                 </div>
+                              </div>
+                            ))}
+                         </div>
+                       )}
+                    </div>
                   </div>
                 )}
              </div>
@@ -2014,6 +2246,11 @@ function TaskCard({ task, onUpdate, onDelete, onClick, projectColor, isOverlay }
   isOverlay?: boolean,
   key?: React.Key
 }) {
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editTitle, setEditTitle] = useState(task.title);
+  const [isEditingPriority, setIsEditingPriority] = useState(false);
+  const [isEditingDueDate, setIsEditingDueDate] = useState(false);
+
   const {
     attributes,
     listeners,
@@ -2021,14 +2258,36 @@ function TaskCard({ task, onUpdate, onDelete, onClick, projectColor, isOverlay }
     transform,
     transition,
     isDragging
-  } = useSortable({ id: task.id, disabled: isOverlay });
+  } = useSortable({ 
+    id: task.id, 
+    disabled: isOverlay || isEditingTitle || isEditingPriority || isEditingDueDate
+  });
+
+  useEffect(() => {
+    setEditTitle(task.title);
+  }, [task.title]);
+
+  const handleTitleBlur = () => {
+    if (editTitle.trim() && editTitle !== task.title) {
+       onUpdate({ ...task, title: editTitle });
+    }
+    setIsEditingTitle(false);
+  };
+
+  const handleTitleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handleTitleBlur();
+    if (e.key === 'Escape') {
+      setEditTitle(task.title);
+      setIsEditingTitle(false);
+    }
+  };
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition: transition || 'transform 200ms cubic-bezier(0.2, 0, 0, 1)',
     opacity: isDragging ? 0.4 : 1,
     zIndex: isDragging ? 50 : (isOverlay ? 100 : 1),
-    cursor: isOverlay ? 'grabbing' : 'pointer',
+    cursor: isOverlay ? 'grabbing' : (isEditingTitle || isEditingPriority ? 'text' : 'pointer'),
     pointerEvents: isOverlay ? 'none' : 'auto' as any,
   };
 
@@ -2040,8 +2299,8 @@ function TaskCard({ task, onUpdate, onDelete, onClick, projectColor, isOverlay }
       ref={setNodeRef}
       style={{ ...style, '--project-color': projectColor, touchAction: 'none' } as any}
       layout
-      whileHover={!isOverlay ? { y: -4, scale: 1.01, borderColor: projectColor } : undefined}
-      whileTap={!isOverlay ? { scale: 0.98 } : undefined}
+      whileHover={!isOverlay && !isEditingTitle && !isEditingPriority ? { y: -4, scale: 1.01, borderColor: projectColor } : undefined}
+      whileTap={!isOverlay && !isEditingTitle && !isEditingPriority ? { scale: 0.98 } : undefined}
       initial={!isOverlay ? { opacity: 0, y: 10 } : { opacity: 1, scale: 1.05, rotate: 2 }}
       animate={{ opacity: 1, y: 0, scale: isOverlay ? 1.05 : 1, rotate: isOverlay ? 2 : 0 }}
       className={cn(
@@ -2049,22 +2308,43 @@ function TaskCard({ task, onUpdate, onDelete, onClick, projectColor, isOverlay }
         isOverlay ? "shadow-2xl border-indigo-500 ring-4 ring-indigo-500/10 shadow-indigo-200" : "border-slate-200 hover:shadow-xl hover:shadow-slate-200/40",
         isDragging && !isOverlay && "border-indigo-200 overflow-hidden"
       )}
-      onClick={!isOverlay ? onClick : undefined}
+      onClick={!isOverlay && !isEditingTitle && !isEditingPriority ? onClick : undefined}
       {...attributes}
-      {...listeners}
+      {...(isEditingTitle || isEditingPriority ? {} : listeners)}
     >
       <div className="absolute top-0 left-0 w-1.5 h-full opacity-0 group-hover:opacity-100 transition-opacity" style={{ backgroundColor: projectColor }} />
       
-      <div className="flex flex-col gap-2 h-full justify-between pointer-events-none">
+      <div className="flex flex-col gap-2 h-full justify-between">
         <div className="space-y-2">
           <div className="flex items-start justify-between">
             <div className="flex flex-wrap gap-1">
-              <span className={cn(
-                "px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider shadow-sm",
-                task.priority === 'high' ? "bg-rose-500 text-white" : task.priority === 'medium' ? "bg-amber-400 text-white" : "bg-sky-500 text-white"
-              )}>
-                {task.priority}
-              </span>
+              {isEditingPriority ? (
+                <select
+                   autoFocus
+                   value={task.priority}
+                   onChange={(e) => {
+                     onUpdate({ ...task, priority: e.target.value as any });
+                     setIsEditingPriority(false);
+                   }}
+                   onBlur={() => setIsEditingPriority(false)}
+                   className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider shadow-sm bg-white border border-slate-200 focus:ring-1 focus:ring-indigo-500 pointer-events-auto outline-none"
+                >
+                   <option value="low">Low</option>
+                   <option value="medium">Medium</option>
+                   <option value="high">High</option>
+                </select>
+              ) : (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setIsEditingPriority(true); }}
+                  className={cn(
+                    "px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider shadow-sm transition-transform active:scale-90 pointer-events-auto",
+                    task.priority === 'high' ? "bg-rose-500 text-white" : task.priority === 'medium' ? "bg-amber-400 text-white" : "bg-sky-500 text-white"
+                  )}
+                >
+                  {task.priority}
+                </button>
+              )}
+              
               {task.assignee && (
                  <div className="flex items-center gap-1 bg-slate-900 text-white px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider shadow-sm">
                     <User size={7} className="text-indigo-400" />
@@ -2087,13 +2367,28 @@ function TaskCard({ task, onUpdate, onDelete, onClick, projectColor, isOverlay }
           </div>
 
           <div className="min-h-[32px]">
-            <h4 className="text-xs font-bold text-slate-900 leading-tight transition-colors line-clamp-3">
-              {task.title}
-            </h4>
+            {isEditingTitle ? (
+              <input
+                autoFocus
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                onBlur={handleTitleBlur}
+                onKeyDown={handleTitleKeyDown}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full text-xs font-bold text-slate-900 leading-tight bg-slate-50 border-0 rounded p-1 focus:ring-1 focus:ring-indigo-400 outline-none pointer-events-auto"
+              />
+            ) : (
+              <h4 
+                onClick={(e) => { e.stopPropagation(); setIsEditingTitle(true); }}
+                className="text-xs font-bold text-slate-900 leading-tight transition-colors line-clamp-3 hover:text-indigo-600 cursor-text pointer-events-auto"
+              >
+                {task.title}
+              </h4>
+            )}
           </div>
         </div>
 
-        <div className="flex flex-col gap-2 mt-auto pt-2 border-t border-slate-50">
+        <div className="flex flex-col gap-2 mt-auto pt-2 border-t border-slate-50 pointer-events-none">
           {task.subTasks.length > 0 && (
             <div className="space-y-1">
                <div className="flex items-center justify-between">
@@ -2114,19 +2409,49 @@ function TaskCard({ task, onUpdate, onDelete, onClick, projectColor, isOverlay }
 
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-               {task.dueDate && (
-                 <div className={cn(
-                   "flex items-center text-[8px] font-black uppercase tracking-widest",
-                   task.dueDate < new Date() && task.status !== 'completed' ? "text-rose-500" : "text-slate-400"
-                 )}>
+               {isEditingDueDate ? (
+                 <input 
+                   autoFocus
+                   type="date"
+                   defaultValue={task.dueDate ? format(task.dueDate, 'yyyy-MM-dd') : ''}
+                   onChange={(e) => {
+                     const date = e.target.value ? new Date(e.target.value) : undefined;
+                     onUpdate({ ...task, dueDate: date });
+                     setIsEditingDueDate(false);
+                   }}
+                   onBlur={() => setIsEditingDueDate(false)}
+                   className="text-[8px] font-black uppercase tracking-widest bg-slate-50 border-0 rounded p-0 focus:ring-0 pointer-events-auto"
+                 />
+               ) : task.dueDate ? (
+                 <button
+                   onClick={(e) => { e.stopPropagation(); setIsEditingDueDate(true); }}
+                   className={cn(
+                     "flex items-center text-[8px] font-black uppercase tracking-widest hover:text-indigo-600 transition-colors pointer-events-auto",
+                     task.dueDate < new Date() && task.status !== 'completed' ? "text-rose-500" : "text-slate-400"
+                   )}
+                 >
                    <Clock size={10} className="mr-0.5" />
                    {format(task.dueDate, 'MMM d')}
-                 </div>
+                 </button>
+               ) : (
+                 <button
+                   onClick={(e) => { e.stopPropagation(); setIsEditingDueDate(true); }}
+                   className="flex items-center text-[8px] font-black uppercase tracking-widest text-slate-300 hover:text-indigo-600 transition-colors pointer-events-auto"
+                 >
+                   <CalendarIcon size={10} className="mr-0.5" />
+                   Set Date
+                 </button>
                )}
                {task.comments && task.comments.length > 0 && (
                  <div className="flex items-center text-[8px] font-black text-slate-400 uppercase tracking-widest">
                    <MessageSquare size={10} className="mr-0.5 text-sky-500" />
                    {task.comments.length}
+                 </div>
+               )}
+               {task.attachments && task.attachments.length > 0 && (
+                 <div className="flex items-center text-[8px] font-black text-slate-400 uppercase tracking-widest">
+                   <Paperclip size={10} className="mr-0.5 text-indigo-500" />
+                   {task.attachments.length}
                  </div>
                )}
             </div>

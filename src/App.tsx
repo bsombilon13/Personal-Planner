@@ -116,8 +116,8 @@ export default function App() {
   const [projectTasks, setProjectTasks] = useState<ProjectTask[]>(() => {
     const stored = localStorage.getItem(STORAGE_KEYS.TASKS);
     return stored ? JSON.parse(stored, revivifyDates) : [
-      { id: 't1', projectId: 'p1', title: 'Logo Design', status: 'completed', priority: 'high', dueDate: new Date(new Date().setDate(new Date().getDate() + 2)), assignee: 'Bryan Sombilon', creatorName: 'Bryan Sombilon', createdAt: new Date(new Date().setDate(new Date().getDate() - 5)), subTasks: [{ id: 'st1', title: 'Brainstorming', isCompleted: true }, { id: 'st2', title: 'Sketching', isCompleted: true }], comments: [{ id: 'c1', authorName: 'Bryan Sombilon', text: 'Great first pass on the sketches!', createdAt: new Date() }] },
-      { id: 't2', projectId: 'p1', title: 'Color Palette', status: 'in-progress', priority: 'medium', dueDate: new Date(new Date().setDate(new Date().getDate() + 5)), assignee: 'Bryan Sombilon', creatorName: 'Bryan Sombilon', createdAt: new Date(new Date().setDate(new Date().getDate() - 3)), subTasks: [], comments: [] },
+      { id: 't1', projectId: 'p1', title: 'Logo Design', status: 'completed', priority: 'high', dueDate: new Date(new Date().setDate(new Date().getDate() + 2)), assignee: 'Bryan Sombilon', creatorName: 'Bryan Sombilon', createdAt: new Date(new Date().setDate(new Date().getDate() - 5)), subTasks: [{ id: 'st1', title: 'Brainstorming', isCompleted: true }, { id: 'st2', title: 'Sketching', isCompleted: true }], comments: [{ id: 'c1', authorName: 'Bryan Sombilon', text: 'Great first pass on the sketches!', createdAt: new Date() }], order: 0, attachments: [] },
+      { id: 't2', projectId: 'p1', title: 'Color Palette', status: 'in-progress', priority: 'medium', dueDate: new Date(new Date().setDate(new Date().getDate() + 5)), assignee: 'Bryan Sombilon', creatorName: 'Bryan Sombilon', createdAt: new Date(new Date().setDate(new Date().getDate() - 3)), subTasks: [], comments: [], order: 1, attachments: [] },
     ];
   });
 
@@ -251,14 +251,16 @@ export default function App() {
     setProjects(projects.map(p => p.id === updatedProject.id ? updatedProject : p));
   };
 
-  const addProjectTask = (taskData: Omit<ProjectTask, 'id' | 'subTasks' | 'comments' | 'createdAt' | 'creatorName'>) => {
+  const addProjectTask = (taskData: Omit<ProjectTask, 'id' | 'subTasks' | 'comments' | 'attachments' | 'createdAt' | 'creatorName' | 'order'>) => {
     const newTask: ProjectTask = {
       ...taskData,
       id: Math.random().toString(36).substr(2, 9),
       creatorName: 'Bryan Sombilon',
       createdAt: new Date(),
       subTasks: [],
-      comments: []
+      comments: [],
+      attachments: [],
+      order: projectTasks.filter(t => t.projectId === taskData.projectId && t.status === taskData.status).length
     };
     setProjectTasks([...projectTasks, newTask]);
   };
