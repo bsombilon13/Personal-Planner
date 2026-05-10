@@ -326,7 +326,10 @@ export default function App() {
         setActiveProjectId={setActiveProjectId}
         projects={projects}
         projectTasks={projectTasks}
-        onAddProject={() => setIsAddingProject(true)}
+        onAddProject={() => {
+          setActiveTab('projects');
+          setIsAddingProject(true);
+        }}
         onDeleteProject={deleteProject}
       />
       
@@ -380,6 +383,7 @@ export default function App() {
                 projectTasks={projectTasks}
                 setActiveTab={setActiveTab}
                 setActiveProjectId={setActiveProjectId}
+                setIsAddingProject={setIsAddingProject}
               />
             </motion.div>
           ) : activeTab === 'calendar' ? (

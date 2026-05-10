@@ -44,6 +44,7 @@ interface DashboardProps {
   projectTasks: ProjectTask[];
   setActiveTab: (tab: string) => void;
   setActiveProjectId: (id: string | null) => void;
+  setIsAddingProject: (val: boolean) => void;
 }
 
 const StatCard = ({ title, value, subValue, icon: Icon, color, delay, trend }: any) => (
@@ -85,7 +86,8 @@ export default function Dashboard({
   projects, 
   projectTasks,
   setActiveTab,
-  setActiveProjectId
+  setActiveProjectId,
+  setIsAddingProject
 }: DashboardProps) {
   const today = new Date();
   
@@ -211,7 +213,10 @@ export default function Dashboard({
                 </button>
              </div>
              <button 
-               onClick={() => setActiveTab('projects')}
+               onClick={() => {
+                 setActiveTab('projects');
+                 setIsAddingProject(true);
+               }}
                className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 flex items-center gap-3 group"
              >
                Add Project
